@@ -479,3 +479,7 @@ mutation:
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
 check: fmt-check lint type analyze t-fast
+
+.PHONY: release-acceptance
+release-acceptance:
+	uv run --group test pytest -q server/tests/unit/test_migration.py server/tests/unit/test_serializers.py server/tests/unit/test_serving.py

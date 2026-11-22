@@ -8,7 +8,385 @@
     ]
   },
   "defaultBranch": "main",
-  "graphDigest": "dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041",
+  "flows": {
+    "main": {
+      "branches": [
+        "main"
+      ],
+      "concurrency": null,
+      "dependencies": "none",
+      "execution": "github-actions",
+      "inputs": {},
+      "nodes": [
+        {
+          "checkpoint": {},
+          "id": "workflow-graph",
+          "needs": [],
+          "operation": "workflow-graph"
+        },
+        {
+          "checkpoint": {},
+          "id": "fmt-check",
+          "needs": [],
+          "operation": "fmt-check"
+        },
+        {
+          "checkpoint": {},
+          "id": "triple-quotes",
+          "needs": [],
+          "operation": "triple-quotes"
+        },
+        {
+          "checkpoint": {},
+          "id": "suppressions",
+          "needs": [],
+          "operation": "suppressions"
+        },
+        {
+          "checkpoint": {},
+          "id": "hardcoded-colors",
+          "needs": [],
+          "operation": "hardcoded-colors"
+        },
+        {
+          "checkpoint": {},
+          "id": "docs-links",
+          "needs": [],
+          "operation": "docs-links"
+        },
+        {
+          "checkpoint": {},
+          "id": "lint",
+          "needs": [],
+          "operation": "lint"
+        },
+        {
+          "checkpoint": {},
+          "id": "object-annotations",
+          "needs": [],
+          "operation": "object-annotations"
+        },
+        {
+          "checkpoint": {},
+          "id": "type-casts",
+          "needs": [],
+          "operation": "type-casts"
+        },
+        {
+          "checkpoint": {},
+          "id": "type",
+          "needs": [],
+          "operation": "type"
+        },
+        {
+          "checkpoint": {},
+          "id": "analyze",
+          "needs": [],
+          "operation": "analyze"
+        },
+        {
+          "checkpoint": {},
+          "id": "time-bombs",
+          "needs": [],
+          "operation": "time-bombs"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-fast",
+          "needs": [],
+          "operation": "test-fast"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-medium",
+          "needs": [],
+          "operation": "test-medium"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-slow",
+          "needs": [],
+          "operation": "test-slow"
+        },
+        {
+          "checkpoint": {},
+          "id": "flaky-tests",
+          "needs": [],
+          "operation": "flaky-tests"
+        },
+        {
+          "checkpoint": {},
+          "id": "build",
+          "needs": [],
+          "operation": "build"
+        },
+        {
+          "checkpoint": {},
+          "id": "coverage",
+          "needs": [],
+          "operation": "coverage"
+        },
+        {
+          "checkpoint": {},
+          "id": "mutation",
+          "needs": [],
+          "operation": "mutation"
+        },
+        {
+          "checkpoint": {},
+          "id": "bundle-size",
+          "needs": [],
+          "operation": "bundle-size"
+        },
+        {
+          "checkpoint": {},
+          "id": "frontend-performance",
+          "needs": [],
+          "operation": "frontend-performance"
+        },
+        {
+          "checkpoint": {},
+          "id": "audit",
+          "needs": [],
+          "operation": "audit"
+        }
+      ],
+      "presentation": "none",
+      "trigger": "push"
+    },
+    "release": {
+      "branches": [
+        "main"
+      ],
+      "concurrency": "monori-production",
+      "dependencies": "graph",
+      "execution": "github-actions",
+      "inputs": {},
+      "nodes": [
+        {
+          "checkpoint": {},
+          "id": "accept",
+          "needs": [],
+          "operation": "release-accept"
+        },
+        {
+          "checkpoint": {},
+          "id": "build",
+          "needs": [
+            "accept"
+          ],
+          "operation": "release-build"
+        },
+        {
+          "checkpoint": {},
+          "id": "publish",
+          "needs": [
+            "build"
+          ],
+          "operation": "release-publish"
+        },
+        {
+          "checkpoint": {},
+          "id": "promote",
+          "needs": [
+            "publish"
+          ],
+          "operation": "release-promote"
+        }
+      ],
+      "presentation": "release",
+      "trigger": "push"
+    },
+    "review": {
+      "branches": [],
+      "concurrency": null,
+      "dependencies": "graph",
+      "execution": "github-actions",
+      "inputs": {},
+      "nodes": [
+        {
+          "checkpoint": {},
+          "id": "workflow-graph",
+          "needs": [],
+          "operation": "workflow-graph"
+        },
+        {
+          "checkpoint": {},
+          "id": "fmt-check",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "fmt-check"
+        },
+        {
+          "checkpoint": {},
+          "id": "triple-quotes",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "triple-quotes"
+        },
+        {
+          "checkpoint": {},
+          "id": "suppressions",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "suppressions"
+        },
+        {
+          "checkpoint": {},
+          "id": "hardcoded-colors",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "hardcoded-colors"
+        },
+        {
+          "checkpoint": {},
+          "id": "docs-links",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "docs-links"
+        },
+        {
+          "checkpoint": {},
+          "id": "lint",
+          "needs": [
+            "suppressions"
+          ],
+          "operation": "lint"
+        },
+        {
+          "checkpoint": {},
+          "id": "object-annotations",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "object-annotations"
+        },
+        {
+          "checkpoint": {},
+          "id": "type-casts",
+          "needs": [
+            "workflow-graph"
+          ],
+          "operation": "type-casts"
+        },
+        {
+          "checkpoint": {},
+          "id": "type",
+          "needs": [
+            "object-annotations",
+            "type-casts"
+          ],
+          "operation": "type"
+        },
+        {
+          "checkpoint": {},
+          "id": "analyze",
+          "needs": [
+            "lint"
+          ],
+          "operation": "analyze"
+        },
+        {
+          "checkpoint": {},
+          "id": "time-bombs",
+          "needs": [
+            "analyze",
+            "type"
+          ],
+          "operation": "time-bombs"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-fast",
+          "needs": [
+            "analyze"
+          ],
+          "operation": "test-fast"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-medium",
+          "needs": [
+            "analyze"
+          ],
+          "operation": "test-medium"
+        },
+        {
+          "checkpoint": {},
+          "id": "test-slow",
+          "needs": [
+            "test-fast",
+            "test-medium"
+          ],
+          "operation": "test-slow"
+        },
+        {
+          "checkpoint": {},
+          "id": "flaky-tests",
+          "needs": [
+            "test-slow"
+          ],
+          "operation": "flaky-tests"
+        },
+        {
+          "checkpoint": {},
+          "id": "build",
+          "needs": [
+            "test-slow"
+          ],
+          "operation": "build"
+        },
+        {
+          "checkpoint": {},
+          "id": "coverage",
+          "needs": [
+            "test-slow"
+          ],
+          "operation": "coverage"
+        },
+        {
+          "checkpoint": {},
+          "id": "mutation",
+          "needs": [
+            "coverage"
+          ],
+          "operation": "mutation"
+        },
+        {
+          "checkpoint": {},
+          "id": "bundle-size",
+          "needs": [
+            "build"
+          ],
+          "operation": "bundle-size"
+        },
+        {
+          "checkpoint": {},
+          "id": "frontend-performance",
+          "needs": [
+            "build"
+          ],
+          "operation": "frontend-performance"
+        },
+        {
+          "checkpoint": {},
+          "id": "audit",
+          "needs": [
+            "build"
+          ],
+          "operation": "audit"
+        }
+      ],
+      "presentation": "github-pr",
+      "trigger": "pull-request"
+    }
+  },
+  "graphDigest": "fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -19,12 +397,36 @@
       "name": "quality: failing"
     }
   },
-  "manifestVersion": 0,
-  "nodes": [
-    {
+  "manifestVersion": 1,
+  "operations": {
+    "analyze": {
+      "diffOnly": false,
       "env": {},
-      "id": "workflow-graph",
-      "needs": [],
+      "id": "analyze",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "analyze",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make analyze"
+      },
+      "title": "Static analysis"
+    },
+    "audit": {
+      "diffOnly": false,
+      "env": {},
+      "id": "audit",
       "policy": {
         "approvals": {
           "files": false,
@@ -41,16 +443,154 @@
         "adapter": "exit-code"
       },
       "step": {
-        "run": "uv run --locked --group quality-graph qg validate"
+        "run": "make audit"
       },
-      "title": "Workflow graph validation"
+      "title": "Dependency and security audit"
     },
-    {
+    "build": {
+      "diffOnly": false,
+      "env": {},
+      "id": "build",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make build"
+      },
+      "title": "Build frontend"
+    },
+    "bundle-size": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+        "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+        "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+      },
+      "id": "bundle-size",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": true
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+          "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+          "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+        },
+        "run": "scripts/bundle-size-quality-graph.sh"
+      },
+      "title": "Frontend bundle size"
+    },
+    "coverage": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "coverage",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "make BASE=\"$BASE\" coverage-diff"
+      },
+      "title": "Coverage"
+    },
+    "docs-links": {
+      "diffOnly": false,
+      "env": {},
+      "id": "docs-links",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "docs",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make docs-links"
+      },
+      "title": "Documentation links"
+    },
+    "flaky-tests": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "flaky-tests",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "scripts/flaky-quality-graph.sh"
+      },
+      "timeoutMinutes": 180,
+      "title": "Flaky test detection"
+    },
+    "fmt-check": {
+      "diffOnly": false,
       "env": {},
       "id": "fmt-check",
-      "needs": [
-        "workflow-graph"
-      ],
       "policy": {
         "approvals": {
           "files": false,
@@ -71,26 +611,24 @@
       },
       "title": "Format check"
     },
-    {
+    "frontend-performance": {
+      "diffOnly": false,
       "env": {
         "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
       },
-      "id": "triple-quotes",
-      "needs": [
-        "workflow-graph"
-      ],
+      "id": "frontend-performance",
       "policy": {
         "approvals": {
           "files": false,
           "findings": true,
-          "node": false
+          "node": true
         },
         "blocking": true,
         "blockingSeverities": [
           "error"
         ]
       },
-      "profile": "default",
+      "profile": "performance",
       "result": {
         "adapter": "exit-code"
       },
@@ -98,51 +636,19 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "uv run --locked --group quality-graph qg-python-triple-quotes --base \"$BASE\""
+        "run": "make BASE=\"$BASE\" perf-front-diff"
       },
-      "title": "Triple-quoted string style"
+      "timeoutMinutes": 90,
+      "title": "Frontend performance regression"
     },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "suppressions",
-      "needs": [
-        "workflow-graph"
-      ],
-      "policy": {
-        "approvals": {
-          "files": true,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-        },
-        "run": "uv run --locked --group quality-graph qg-python-suppressions --base \"$BASE\""
-      },
-      "title": "Lint suppression gate"
-    },
-    {
+    "hardcoded-colors": {
+      "diffOnly": false,
       "env": {
         "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
         "QG_HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
         "QG_PULL_REQUEST": "${{ github.event.pull_request.number || '0' }}"
       },
       "id": "hardcoded-colors",
-      "needs": [
-        "workflow-graph"
-      ],
       "policy": {
         "approvals": {
           "files": true,
@@ -169,38 +675,10 @@
       },
       "title": "Hardcoded color gate"
     },
-    {
-      "env": {},
-      "id": "docs-links",
-      "needs": [
-        "workflow-graph"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "docs",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make docs-links"
-      },
-      "title": "Documentation links"
-    },
-    {
+    "lint": {
+      "diffOnly": false,
       "env": {},
       "id": "lint",
-      "needs": [
-        "suppressions"
-      ],
       "policy": {
         "approvals": {
           "files": false,
@@ -221,324 +699,12 @@
       },
       "title": "Lint"
     },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "object-annotations",
-      "needs": [
-        "workflow-graph"
-      ],
-      "policy": {
-        "approvals": {
-          "files": true,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-        },
-        "run": "uv run --locked --group quality-graph qg-python-object-annotations --base \"$BASE\""
-      },
-      "title": "Python object annotation gate"
-    },
-    {
-      "env": {},
-      "id": "type-casts",
-      "needs": [
-        "workflow-graph"
-      ],
-      "policy": {
-        "approvals": {
-          "files": true,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make type-casts"
-      },
-      "title": "Unsafe type cast gate"
-    },
-    {
-      "env": {},
-      "id": "type",
-      "needs": [
-        "object-annotations",
-        "type-casts"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make type"
-      },
-      "title": "Type check"
-    },
-    {
-      "env": {},
-      "id": "analyze",
-      "needs": [
-        "lint"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "analyze",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make analyze"
-      },
-      "title": "Static analysis"
-    },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "time-bombs",
-      "needs": [
-        "analyze",
-        "type"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-        },
-        "run": "uv run --locked --group quality-graph qg-python-time-bombs --base \"$BASE\""
-      },
-      "title": "Time bomb guardrail"
-    },
-    {
-      "env": {},
-      "id": "test-fast",
-      "needs": [
-        "analyze"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make t-fast"
-      },
-      "title": "Fast tests"
-    },
-    {
-      "env": {},
-      "id": "test-medium",
-      "needs": [
-        "analyze"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make t-medium"
-      },
-      "title": "Medium tests"
-    },
-    {
-      "env": {},
-      "id": "test-slow",
-      "needs": [
-        "test-fast",
-        "test-medium"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "slow",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make t-slow"
-      },
-      "title": "Slow tests"
-    },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "flaky-tests",
-      "needs": [
-        "test-slow"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-        },
-        "run": "scripts/flaky-quality-graph.sh"
-      },
-      "timeoutMinutes": 180,
-      "title": "Flaky test detection"
-    },
-    {
-      "env": {},
-      "id": "build",
-      "needs": [
-        "test-slow"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "run": "make build"
-      },
-      "title": "Build frontend"
-    },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "coverage",
-      "needs": [
-        "test-slow"
-      ],
-      "policy": {
-        "approvals": {
-          "files": false,
-          "findings": true,
-          "node": false
-        },
-        "blocking": true,
-        "blockingSeverities": [
-          "error"
-        ]
-      },
-      "profile": "default",
-      "result": {
-        "adapter": "exit-code"
-      },
-      "step": {
-        "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-        },
-        "run": "make BASE=\"$BASE\" coverage-diff"
-      },
-      "title": "Coverage"
-    },
-    {
+    "mutation": {
+      "diffOnly": false,
       "env": {
         "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
       },
       "id": "mutation",
-      "needs": [
-        "coverage"
-      ],
       "policy": {
         "approvals": {
           "files": false,
@@ -563,21 +729,17 @@
       "timeoutMinutes": 360,
       "title": "Mutation testing"
     },
-    {
+    "object-annotations": {
+      "diffOnly": false,
       "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
-        "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
-        "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
       },
-      "id": "bundle-size",
-      "needs": [
-        "build"
-      ],
+      "id": "object-annotations",
       "policy": {
         "approvals": {
-          "files": false,
+          "files": true,
           "findings": true,
-          "node": true
+          "node": false
         },
         "blocking": true,
         "blockingSeverities": [
@@ -590,34 +752,220 @@
       },
       "step": {
         "env": {
-          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
-          "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
-          "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "scripts/bundle-size-quality-graph.sh"
+        "run": "uv run --locked --group quality-graph qg-python-object-annotations --base \"$BASE\""
       },
-      "title": "Frontend bundle size"
+      "title": "Python object annotation gate"
     },
-    {
-      "env": {
-        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
-      },
-      "id": "frontend-performance",
-      "needs": [
-        "build"
-      ],
+    "release-accept": {
+      "diffOnly": false,
+      "env": {},
+      "id": "release-accept",
       "policy": {
         "approvals": {
           "files": false,
           "findings": true,
-          "node": true
+          "node": false
         },
         "blocking": true,
         "blockingSeverities": [
           "error"
         ]
       },
-      "profile": "performance",
+      "profile": "release",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
+        },
+        {
+          "run": "make release-acceptance"
+        }
+      ],
+      "title": "Release Accept"
+    },
+    "release-build": {
+      "diffOnly": false,
+      "env": {},
+      "id": "release-build",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "release",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069"
+        },
+        {
+          "run": "scripts/release/build-images.sh \"$RUNNER_TEMP/images\""
+        },
+        {
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "images-${{ github.sha }}",
+            "overwrite": "true",
+            "path": "${{ runner.temp }}/images"
+          }
+        }
+      ],
+      "title": "Release Build"
+    },
+    "release-promote": {
+      "diffOnly": false,
+      "env": {},
+      "id": "release-promote",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "release",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "steps": [
+        {
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "release-manifest-${{ github.sha }}",
+            "path": "${{ runner.temp }}/release-manifest"
+          }
+        },
+        {
+          "run": "images=$(jq -ce 'select(keys == [\"back\",\"front\",\"sync\"])' \"$RUNNER_TEMP/release-manifest/images.json\")\necho \"RELEASE_IMAGES=$images\" >> \"$GITHUB_ENV\"\n"
+        },
+        {
+          "uses": "alchemmist/deploy-to-socrat@881b4d9513ed3cd140926201118770c29ed68597",
+          "with": {
+            "images": "${{ env.RELEASE_IMAGES }}",
+            "token": "${{ secrets.HOMELAB_DEPLOY_KEY }}"
+          }
+        }
+      ],
+      "title": "Release Promote"
+    },
+    "release-publish": {
+      "diffOnly": false,
+      "env": {},
+      "id": "release-publish",
+      "permissions": {
+        "contents": "read",
+        "packages": "write"
+      },
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "release",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "images-${{ github.sha }}",
+            "path": "${{ runner.temp }}/images"
+          }
+        },
+        {
+          "run": "sudo apt-get update -qq && sudo apt-get install -y skopeo"
+        },
+        {
+          "uses": "docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550",
+          "with": {
+            "password": "${{ secrets.GITHUB_TOKEN }}",
+            "registry": "ghcr.io",
+            "username": "${{ github.actor }}"
+          }
+        },
+        {
+          "uses": "docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550",
+          "with": {
+            "password": "${{ secrets.HARBOR_PASSWORD }}",
+            "registry": "harbor.socrat.alchemmist.xyz",
+            "username": "${{ secrets.HARBOR_USERNAME }}"
+          }
+        },
+        {
+          "run": "scripts/release/publish-images.sh \"$RUNNER_TEMP/images\""
+        },
+        {
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "release-manifest-${{ github.sha }}",
+            "overwrite": "true",
+            "path": "${{ runner.temp }}/images/images.json"
+          }
+        }
+      ],
+      "title": "Release Publish"
+    },
+    "suppressions": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "suppressions",
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
       "result": {
         "adapter": "exit-code"
       },
@@ -625,17 +973,14 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "make BASE=\"$BASE\" perf-front-diff"
+        "run": "uv run --locked --group quality-graph qg-python-suppressions --base \"$BASE\""
       },
-      "timeoutMinutes": 90,
-      "title": "Frontend performance regression"
+      "title": "Lint suppression gate"
     },
-    {
+    "test-fast": {
+      "diffOnly": false,
       "env": {},
-      "id": "audit",
-      "needs": [
-        "build"
-      ],
+      "id": "test-fast",
       "policy": {
         "approvals": {
           "files": false,
@@ -652,11 +997,189 @@
         "adapter": "exit-code"
       },
       "step": {
-        "run": "make audit"
+        "run": "make t-fast"
       },
-      "title": "Dependency and security audit"
+      "title": "Fast tests"
+    },
+    "test-medium": {
+      "diffOnly": false,
+      "env": {},
+      "id": "test-medium",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make t-medium"
+      },
+      "title": "Medium tests"
+    },
+    "test-slow": {
+      "diffOnly": false,
+      "env": {},
+      "id": "test-slow",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "slow",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make t-slow"
+      },
+      "title": "Slow tests"
+    },
+    "time-bombs": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "time-bombs",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-time-bombs --base \"$BASE\""
+      },
+      "title": "Time bomb guardrail"
+    },
+    "triple-quotes": {
+      "diffOnly": false,
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "triple-quotes",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-triple-quotes --base \"$BASE\""
+      },
+      "title": "Triple-quoted string style"
+    },
+    "type": {
+      "diffOnly": false,
+      "env": {},
+      "id": "type",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make type"
+      },
+      "title": "Type check"
+    },
+    "type-casts": {
+      "diffOnly": false,
+      "env": {},
+      "id": "type-casts",
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make type-casts"
+      },
+      "title": "Unsafe type cast gate"
+    },
+    "workflow-graph": {
+      "diffOnly": false,
+      "env": {},
+      "id": "workflow-graph",
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "uv run --locked --group quality-graph qg validate"
+      },
+      "title": "Workflow graph validation"
     }
-  ],
+  },
   "profiles": {
     "analyze": {
       "env": {},
@@ -853,6 +1376,15 @@
         }
       ]
     },
+    "release": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": []
+    },
     "slow": {
       "env": {},
       "permissions": {
@@ -897,6 +1429,6 @@
   "provider": "github",
   "resultSchemaVersion": 0,
   "runtime": {
-    "action": "alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691"
+    "action": "alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d"
   }
 }
