@@ -18,6 +18,8 @@ import threading
 from alembic import command
 from alembic.config import Config
 
+from monori.server.app.pg_runtime import Connection
+
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parents[1]
 DB_PATH = os.environ.get("MONORI_DB", str(pathlib.Path.cwd() / "server" / "data" / "monori.db"))
 SCHEMA_PATH = PACKAGE_DIR / "schema.sql"
@@ -148,8 +150,6 @@ def _bootstrap(path: pathlib.Path) -> None:
 def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     """Handle connect."""
     if db_path is None and (url := os.environ.get("MONORI_DATABASE_URL")):
-        from monori.server.app.pg_runtime import Connection
-
         return Connection(url)
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,8 +167,6 @@ def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection
 
 def begin_write(conn: sqlite3.Connection) -> None:
     """Acquire SQLite's write reservation before correlated reads and writes."""
-    from monori.server.app.pg_runtime import Connection
-
     if isinstance(conn, Connection):
         conn.lock()
     elif not conn.in_transaction:

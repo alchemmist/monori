@@ -1,13 +1,12 @@
 # Copyright (c) 2026
 import re
 
-from monori.server.app.pg_runtime import Connection
-
 import pytest
 from fastapi.testclient import TestClient
 
 from monori.server.app.db import connect
 from monori.server.app.deps import TransactionResponse
+from monori.server.app.pg_runtime import Connection
 from monori.server.tests.conftest import Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
@@ -169,10 +168,12 @@ def test_delete_transfer_with_legs_is_atomic(api: Api, client: TestClient) -> No
     try:
         if isinstance(c, Connection):
             c.execute(
-                "CREATE FUNCTION fail_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END; $$"
+                "CREATE FUNCTION fail_write() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                "BEGIN RAISE EXCEPTION 'injected'; END; $$"
             )
             c.execute(
-                f"CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions FOR EACH ROW WHEN (OLD.id={leg_ids[1]}) EXECUTE FUNCTION fail_write()"
+                "CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions "
+                f"FOR EACH ROW WHEN (OLD.id={leg_ids[1]}) EXECUTE FUNCTION fail_write()"
             )
         else:
             c.execute(

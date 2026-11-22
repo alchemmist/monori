@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """PostgreSQL-backed implementation of the application's small DB-API subset."""
 
 import re
@@ -7,7 +8,6 @@ from decimal import Decimal
 import psycopg
 from psycopg import ClientCursor
 
-# Only these fixed application tables have server-generated numeric keys.
 IDENTITIES = {
     "accounts",
     "activity_events",
@@ -81,10 +81,10 @@ class Cursor:
             )
         if lowered.startswith("insert or ignore into "):
             statement = (
-                re.sub("^insert or ignore into ", "INSERT INTO ", statement, flags=re.I)
+                re.sub("^insert or ignore into ", "INSERT INTO ", statement, flags=re.IGNORECASE)
                 + " ON CONFLICT DO NOTHING"
             )
-        match = re.match(r"INSERT\s+INTO\s+(\w+)", statement, re.I)
+        match = re.match(r"INSERT\s+INTO\s+(\w+)", statement, re.IGNORECASE)
         identity = bool(
             match and match[1].lower() in IDENTITIES and "RETURNING" not in statement.upper()
         )

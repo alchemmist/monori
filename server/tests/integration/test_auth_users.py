@@ -1,13 +1,12 @@
 # Copyright (c) 2026
 from datetime import UTC, datetime, tzinfo
 
-from monori.server.app.pg_runtime import Connection
-
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
 import monori.server.app.db as dbmod
+from monori.server.app.pg_runtime import Connection
 from monori.server.app.routers import auth_router
 from monori.server.app.routers.auth_router import _valid_email
 from monori.server.tests.conftest import Api, login_as
@@ -54,10 +53,12 @@ def test_register_rolls_back_when_default_account_creation_fails(client: TestCli
     try:
         if isinstance(c, Connection):
             c.execute(
-                "CREATE FUNCTION fail_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END; $$"
+                "CREATE FUNCTION fail_write() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                "BEGIN RAISE EXCEPTION 'injected'; END; $$"
             )
             c.execute(
-                "CREATE TRIGGER fail_default_account BEFORE INSERT ON accounts FOR EACH ROW EXECUTE FUNCTION fail_write()"
+                "CREATE TRIGGER fail_default_account BEFORE INSERT ON accounts "
+                "FOR EACH ROW EXECUTE FUNCTION fail_write()"
             )
         else:
             c.execute(

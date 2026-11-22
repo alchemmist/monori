@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """A scoped financial-data SQL console, not a PostgreSQL cluster administrator."""
 
 import os
@@ -10,18 +11,97 @@ from pglast import parse_sql
 from pglast.parser import ParseError
 from pglast.stream import RawStream
 
-TABLES = set(
-    "accounts activity_events alembic_version bank_connections budgets categories category_group_types category_groups feature_usage import_batches oidc_identities splits transactions transfer_rejections transfers users".split()
-)
-NODES = set(
-    "SelectStmt UpdateStmt DeleteStmt InsertStmt CreateStmt ColumnDef TypeName TypeCast ResTarget A_Const Integer Float String Boolean BitString ColumnRef RangeVar Alias A_Star A_Expr FuncCall BoolExpr NullTest BooleanTest SortBy JoinExpr RangeSubselect SubLink CommonTableExpr WithClause CaseExpr CaseWhen CoalesceExpr MinMaxExpr".split()
-)
-FUNCTIONS = set(
-    "count min max sum avg lower upper length char_length substr substring trim round abs date to_char date_trunc nullif".split()
-)
-TYPES = set(
-    "int2 int4 int8 integer bigint smallint numeric decimal text varchar bool boolean date timestamp timestamptz".split()
-)
+TABLES = {
+    "accounts",
+    "activity_events",
+    "alembic_version",
+    "bank_connections",
+    "budgets",
+    "categories",
+    "category_group_types",
+    "category_groups",
+    "feature_usage",
+    "import_batches",
+    "oidc_identities",
+    "splits",
+    "transactions",
+    "transfer_rejections",
+    "transfers",
+    "users",
+}
+NODES = {
+    "SelectStmt",
+    "UpdateStmt",
+    "DeleteStmt",
+    "InsertStmt",
+    "CreateStmt",
+    "ColumnDef",
+    "TypeName",
+    "TypeCast",
+    "ResTarget",
+    "A_Const",
+    "Integer",
+    "Float",
+    "String",
+    "Boolean",
+    "BitString",
+    "ColumnRef",
+    "RangeVar",
+    "Alias",
+    "A_Star",
+    "A_Expr",
+    "FuncCall",
+    "BoolExpr",
+    "NullTest",
+    "BooleanTest",
+    "SortBy",
+    "JoinExpr",
+    "RangeSubselect",
+    "SubLink",
+    "CommonTableExpr",
+    "WithClause",
+    "CaseExpr",
+    "CaseWhen",
+    "CoalesceExpr",
+    "MinMaxExpr",
+}
+FUNCTIONS = {
+    "count",
+    "min",
+    "max",
+    "sum",
+    "avg",
+    "lower",
+    "upper",
+    "length",
+    "char_length",
+    "substr",
+    "substring",
+    "trim",
+    "round",
+    "abs",
+    "date",
+    "to_char",
+    "date_trunc",
+    "nullif",
+}
+TYPES = {
+    "int2",
+    "int4",
+    "int8",
+    "integer",
+    "bigint",
+    "smallint",
+    "numeric",
+    "decimal",
+    "text",
+    "varchar",
+    "bool",
+    "boolean",
+    "date",
+    "timestamp",
+    "timestamptz",
+}
 
 
 def nodes(x):
@@ -126,8 +206,8 @@ def plan(statement, scratch):
 
 
 def run(body, uid):
-    from monori.server.app.routers import admin_sql as api
     from monori.server.app.deps import conn
+    from monori.server.app.routers import admin_sql as api
 
     statement = body.sql.strip()
     started = time.monotonic()
