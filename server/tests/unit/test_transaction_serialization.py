@@ -46,6 +46,8 @@ def test_transaction_wire_response_preserves_nullable_ids_and_split_fields(
         "categoryId": 17,
         "accountId": 23,
         "transferId": transfer_id,
+        "refundOfId": None,
+        "refundIds": [],
         "comment": "Parent note",
         "source": "sync",
         "hidden": True,
@@ -70,6 +72,9 @@ def test_transaction_batch_preserves_row_order_and_groups_ordered_splits() -> No
                 id INTEGER PRIMARY KEY, transaction_id INTEGER, category_id INTEGER,
                 amount INTEGER, comment TEXT, sort INTEGER
             );
+            CREATE TABLE accounts (id INTEGER PRIMARY KEY, user_id INTEGER);
+            INSERT INTO accounts VALUES (7, 1);
+            CREATE TABLE refund_links (refund_tx_id INTEGER, original_tx_id INTEGER);
             """,
         )
         connection.executemany(
