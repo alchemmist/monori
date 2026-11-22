@@ -7,14 +7,17 @@ import re
 import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from decimal import Decimal
-from types import TracebackType
-from typing import ClassVar, Self, SupportsIndex, cast, overload, override
+from typing import TYPE_CHECKING, ClassVar, Self, SupportsIndex, cast, overload, override
 
 import psycopg
 from psycopg import ClientCursor
 from psycopg import Connection as PsycopgConnection
 from psycopg import Cursor as PsycopgCursor
-from psycopg.rows import RowMaker
+
+if TYPE_CHECKING:
+    from types import TracebackType
+
+    from psycopg.rows import RowMaker
 
 IDENTITIES = {
     "accounts",
