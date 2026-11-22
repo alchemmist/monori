@@ -22,7 +22,7 @@ for component in front back sync; do
   [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
   manifest=$(jq -c --arg key "$component" --arg value "$digest" '. + {($key): $value}' <<<"$manifest")
 done
-printf '%s\n' "$manifest" > "$out/images.json"
+printf '%s\n' "$manifest" >"$out/images.json"
 # Legacy compose consumers still follow the rolling component tags. Create
 # these from immutable registry references, after all immutable pushes pass.
 for component in front back sync; do
