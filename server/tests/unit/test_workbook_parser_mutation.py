@@ -497,3 +497,31 @@ def test_parse_workbook_reads_a_stated_category_sheet() -> None:
     ]
     groceries = next(category for category in parsed.categories if category.name == "Groceries")
     assert groceries.keywords == "lenta|okey"
+
+
+def test_year_summaries_read_localized_labels_and_preserve_zero_seeds() -> None:
+    _, ws = _sheet("2026")
+    ws.cell(1, 2, "JAN 2026")
+    ws.cell(8, 1, "Category")
+    for base in (2, 6, 10):
+        for offset, label in enumerate(("Budgeted", "Outflows", "Balance")):
+            ws.cell(8, base + offset, label)
+    ws.cell(6, 4, "Не заложено в декабре")  # noqa: RUF001
+    ws.cell(6, 3, 0)
+    ws.cell(3, 8, "Not budgeted in January")
+    ws.cell(3, 7, 12.34)
+    ws.cell(2, 8, "Поступления в феврале")
+    ws.cell(2, 7, 123.45)
+    ws.cell(6, 7, "Доступный остаток")
+    ws.cell(5, 7, 67.89)
+    ws.cell(1, 11, 99)  # An unlabeled number is not a carried balance.
+    layout = _find_layout(ws)
+    assert layout is not None
+
+    parsed = _parse_year_sheet(ws, 2026, layout)
+
+    assert parsed.months == [1, 2, 3]
+    assert parsed.income == {2: 12345}
+    assert parsed.available == {2: 6789}
+    assert parsed.seeds == {1: 0, 2: 1234}
+    assert parsed.seed == 0
