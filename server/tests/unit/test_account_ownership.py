@@ -22,7 +22,6 @@ def db(tmp_path: Path) -> Iterator[DatabaseConnection]:
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
         " VALUES ('b@example.com', 'b@example.com', 'x', '2026-01-01T00:00:00')"
     )
-    # user 1 owns account 10 and connection 100; user 2 owns account 20.
     connection.execute("INSERT INTO accounts (user_id, name, sort) VALUES (1, 'A cash', 1)")
     connection.execute("INSERT INTO accounts (user_id, name, sort) VALUES (2, 'B cash', 1)")
     connection.execute("UPDATE accounts SET id=10 WHERE user_id=1 AND name='A cash'")
