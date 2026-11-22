@@ -160,6 +160,7 @@ fmt-back:
 	@(uv run --locked --group format ruff check server --fix >/dev/null 2>&1 || true)
 	uv run --locked --group format ruff format server
 	$(SQLFLUFF) fix server
+	$(SQLFLUFF) fix --dialect postgres server/postgres
 
 fmt-ci:
 	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml' | grep -Ev '^(web|server)/'); [ -z "$$files" ] || $(WEBBIN)/prettier --write $$files
@@ -173,6 +174,7 @@ fmt-check:
 	uv run --locked --group format ruff check $(PYTHON_SOURCES)
 	uv run --locked --group format ruff format --check $(PYTHON_SOURCES)
 	$(SQLFLUFF) lint .
+	$(SQLFLUFF) lint --dialect postgres server/postgres
 
 triple-quotes:
 	uv run --locked python -m monori.ci.lib.triple_quotes --base "$(BASE)"
@@ -197,6 +199,7 @@ lint-no-comments:
 
 lint-sql:
 	$(SQLFLUFF) lint .
+	$(SQLFLUFF) lint --dialect postgres server/postgres
 
 lint-yaml:
 	uvx yamllint -c .yamllint.yaml .

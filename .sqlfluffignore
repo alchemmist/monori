@@ -1,0 +1,2 @@
+# PostgreSQL snapshot uses PostgreSQL-only syntax; lint it separately with that dialect.
+server/postgres/*.sql
