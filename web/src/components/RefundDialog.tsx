@@ -1,3 +1,4 @@
+import { Button, Stack } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { FSelect } from "../ui/fields.jsx";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -17,25 +18,33 @@ export default function RefundDialog({
     const [originalId, setOriginalId] = useState(
         transaction.refundOfId == null ? "" : String(transaction.refundOfId),
     );
+    const [includeAll, setIncludeAll] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         let active = true;
-        void refundSuggestions(transaction.id)
+        void refundSuggestions(transaction.id, includeAll)
             .then((suggestions) => {
                 if (active) setRows(suggestions);
             })
             .catch((error: unknown) => {
+                if (!active) return;
                 notify({
-                    title: "Failed to load refund suggestions",
+                    title: includeAll
+                        ? "Failed to load eligible purchases"
+                        : "Failed to load refund suggestions",
                     theme: "danger",
                     content: String(error),
                 });
+            })
+            .finally(() => {
+                if (active) setLoading(false);
             });
         return () => {
             active = false;
         };
-    }, [notify, refundSuggestions, transaction.id]);
+    }, [includeAll, notify, refundSuggestions, transaction.id]);
 
     const apply = async () => {
         if (originalId === "") return;
@@ -60,17 +69,31 @@ export default function RefundDialog({
             applyLoading={busy}
             applyDisabled={originalId === ""}
         >
-            <FSelect
-                label="Original purchase"
-                value={originalId === "" ? null : originalId}
-                onChange={setOriginalId}
-                data={rows.map((row) => ({
-                    value: String(row.id),
-                    label: `${fmtDate(row.date)} · ${row.description} · ${money(-row.amount)}`,
-                }))}
-                searchable
-                placeholder="Choose a purchase"
-            />
+            <Stack gap="xs">
+                <FSelect
+                    label="Original purchase"
+                    value={originalId === "" ? null : originalId}
+                    onChange={setOriginalId}
+                    data={rows.map((row) => ({
+                        value: String(row.id),
+                        label: `${fmtDate(row.date)} · ${row.description} · ${money(-row.amount)}`,
+                    }))}
+                    searchable
+                    placeholder="Choose a purchase"
+                />
+                <Button
+                    variant="subtle"
+                    loading={loading}
+                    disabled={busy}
+                    onClick={() => {
+                        setLoading(true);
+                        setOriginalId("");
+                        setIncludeAll((value) => !value);
+                    }}
+                >
+                    {includeAll ? "Show suggestions" : "Show all eligible purchases"}
+                </Button>
+            </Stack>
         </AppDialog>
     );
 }

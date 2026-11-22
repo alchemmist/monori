@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import RefundDialog from "./RefundDialog.jsx";
 import { renderUI, resetStore, screen, seed, tx, waitFor } from "../test/render.jsx";
+import { api } from "../api.js";
 import { useStore } from "../store.js";
 
 const refund = tx(2, { amount: 2400, description: "Shop refund", refundOfId: null });
@@ -25,6 +26,33 @@ describe("RefundDialog", () => {
 
         await waitFor(() => expect(link).toHaveBeenCalledWith(2, 1));
         expect(notify).toHaveBeenCalledWith({ title: "Refund linked", theme: "success" });
+        expect(close).toHaveBeenCalledOnce();
+    });
+
+    it("searches beyond suggestions and links a purchase missing from the snapshot", async () => {
+        window.history.replaceState({}, "", "/");
+        const adjustment = { ...refund, amount: 400, description: "Card adjustment" };
+        const ozon = { ...purchase, amount: -1000, description: "OZON" };
+        seed({ transactions: [adjustment] });
+        const suggestions = vi
+            .spyOn(api, "refundSuggestions")
+            .mockResolvedValueOnce({ rows: [] })
+            .mockResolvedValueOnce({ rows: [ozon] });
+        const link = vi
+            .spyOn(api, "linkRefund")
+            .mockResolvedValue({ refundOfId: 1, categoryId: null });
+        const close = vi.fn();
+        const { user } = renderUI(<RefundDialog transaction={adjustment} onClose={close} />);
+
+        await waitFor(() => expect(suggestions).toHaveBeenCalled());
+        await user.click(screen.getByRole("button", { name: "Show all eligible purchases" }));
+        await user.click(screen.getByRole("button", { name: /original purchase/i }));
+        await user.type(screen.getByPlaceholderText("Search"), "OZON");
+        await user.click(await screen.findByRole("option", { name: /OZON/ }));
+        await user.click(screen.getByRole("button", { name: "Link refund" }));
+
+        await waitFor(() => expect(link).toHaveBeenCalledWith(2, 1));
+        expect(suggestions).toHaveBeenLastCalledWith(2, true);
         expect(close).toHaveBeenCalledOnce();
     });
 

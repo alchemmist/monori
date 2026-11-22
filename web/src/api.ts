@@ -205,10 +205,10 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ parts }),
         }).then(json(splitsResponseSchema)),
-    refundSuggestions: (id: Id): Promise<{ rows: Transaction[] }> =>
-        apiFetch(`/api/transactions/${id}/refund-suggestions`).then(
-            json(refundSuggestionsResponseSchema),
-        ),
+    refundSuggestions: (id: Id, includeAll = false): Promise<{ rows: Transaction[] }> =>
+        apiFetch(
+            `/api/transactions/${id}/refund-suggestions${includeAll ? "?include_all=true" : ""}`,
+        ).then(json(refundSuggestionsResponseSchema)),
     linkRefund: (id: Id, originalId: Id): Promise<{ refundOfId: Id; categoryId: Id | null }> =>
         apiFetch(`/api/transactions/${id}/refund`, {
             method: "PUT",

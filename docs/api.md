@@ -188,7 +188,7 @@ newest-first (`date DESC, id DESC`).
 | PATCH | `/api/transactions/{id}` | any subset of the create fields (`accountId` moves the row to another account) | Recomputes the dedup hash from the resulting date/amount/description. |
 | DELETE | `/api/transactions/{id}` | — | `404` if missing. |
 | POST | `/api/transactions/bulk` | `{action, ids, categoryId?}` | `action` is `categorize`, `move`, or `delete`. Returns `{affected}`. |
-| GET | `/api/transactions/{id}/refund-suggestions` | — | Suggests eligible purchases for a positive transaction. |
+| GET | `/api/transactions/{id}/refund-suggestions` | — | Suggests eligible purchases for a positive transaction. `?include_all=true` returns all eligible purchases for manual selection, without requiring a merchant or exact-amount match. |
 | PUT | `/api/transactions/{id}/refund` | `{originalId}` | Links a refund to its purchase and copies the purchase category. Several partial refunds may share a purchase, but their sum cannot exceed it. |
 | DELETE | `/api/transactions/{id}/refund` | — | Removes the link while preserving the refund category. |
 

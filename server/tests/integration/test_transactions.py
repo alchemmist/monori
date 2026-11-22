@@ -5,7 +5,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from monori.server.app.deps import conn
 from monori.server.app.value_types import Money
-from monori.server.tests.conftest import Api, TransactionOptions
+from monori.server.tests.conftest import Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -690,3 +690,66 @@ def test_hidden_transaction_still_blocks_reimport(api: Api, client: TestClient) 
     assert client.get("/api/transactions?hidden=true").json()["total"] == 1
 
     assert api.preview(api.statement)[0].duplicate is True
+
+
+def test_manual_refund_selection_includes_unmatched_eligible_purchases(
+    api: Api,
+    client: TestClient,
+) -> None:
+    purchase = api.tx("2026-01-01", -1000, TransactionOptions(description="OZON"))
+    refund = api.tx("2026-01-02", 400, TransactionOptions(description="Card adjustment"))
+    api.tx("2026-01-03", -1000, TransactionOptions(description="Future"))
+    exhausted = api.tx("2026-01-01", -1000, TransactionOptions(description="Exhausted"))
+    previous = api.tx("2026-01-02", 700)
+    assert (
+        client.put(
+            f"/api/transactions/{previous}/refund",
+            json={"originalId": exhausted},
+        ).status_code
+        == 200
+    )
+
+    path = f"/api/transactions/{refund}/refund-suggestions"
+    assert client.get(path).json()["rows"] == []
+    response = client.get(path, params={"include_all": "true"})
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()["rows"]] == [purchase]
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 200
+    )
+    assert api.tx_by(refund).refund_of_id == purchase
+
+
+def test_manual_refund_selection_remains_scoped_to_the_owner(
+    api: Api,
+    client: TestClient,
+) -> None:
+    purchase = api.tx("2026-01-01", -1000, TransactionOptions(description="OZON"))
+    refund = api.tx("2026-01-02", 400, TransactionOptions(description="Card adjustment"))
+    owner_headers = dict(client.headers)
+    client.headers.update(login_as(client, "other@example.com"))
+    foreign_purchase = api.tx("2026-01-01", -1000)
+    foreign_refund = api.tx("2026-01-02", 400)
+    client.headers.update(owner_headers)
+
+    path = f"/api/transactions/{refund}/refund-suggestions"
+    rows = client.get(path, params={"include_all": "true"}).json()["rows"]
+    assert [row["id"] for row in rows] == [purchase]
+    assert (
+        client.get(
+            f"/api/transactions/{foreign_refund}/refund-suggestions",
+            params={"include_all": "true"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/refund",
+            json={"originalId": foreign_purchase},
+        ).status_code
+        == 404
+    )

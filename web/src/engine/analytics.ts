@@ -114,7 +114,12 @@ export function weekdayProfile(snapshot: Snapshot, year: string): number[] {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array.from({ length: 7 }, (): number => 0);
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (
+            !t.date.startsWith(year) ||
+            t.categoryId == null ||
+            (t.amount >= 0 && t.refundOfId == null)
+        )
+            continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
@@ -130,7 +135,12 @@ export function dayOfMonthProfile(snapshot: Snapshot, year: string): number[] {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array.from({ length: 31 }, (): number => 0);
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (
+            !t.date.startsWith(year) ||
+            t.categoryId == null ||
+            (t.amount >= 0 && t.refundOfId == null)
+        )
+            continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;

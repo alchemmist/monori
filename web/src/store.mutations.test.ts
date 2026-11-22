@@ -80,6 +80,38 @@ describe("store demo mutations", () => {
         await expect(store.refundSuggestions(1)).resolves.toEqual([]);
     });
 
+    it("allows manual demo linking without a matching merchant or amount", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    {
+                        id: 1,
+                        date: "2026-01-01",
+                        amount: -1000,
+                        description: "OZON",
+                        categoryId: 2,
+                    },
+                    { id: 2, date: "2026-01-02", amount: 400, description: "Card adjustment" },
+                    { id: 3, date: "2026-01-03", amount: -1000, description: "Future" },
+                    { id: 4, date: "2026-01-01", amount: -300, description: "Too small" },
+                    { id: 5, date: "2026-01-01", amount: -1000, transferId: "transfer" },
+                ],
+            }),
+        });
+        const store = useStore.getState();
+        await expect(store.refundSuggestions(2)).resolves.toEqual([]);
+        await expect(store.refundSuggestions(2, true)).resolves.toEqual([
+            expect.objectContaining({ id: 1 }),
+        ]);
+        await store.linkRefund(2, 1);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 2),
+        ).toMatchObject({ refundOfId: 1, categoryId: 2, description: "Card adjustment" });
+        await expect(store.refundSuggestions(2)).resolves.toEqual([
+            expect.objectContaining({ id: 1 }),
+        ]);
+    });
+
     it("moves a demo refund between purchases and tolerates a missing row", async () => {
         useStore.setState({
             snapshot: buildSnapshot({

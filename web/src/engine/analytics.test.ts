@@ -921,3 +921,20 @@ describe("charts vs budget table parity", () => {
         expect(row!.total).toBe(424_776_00);
     });
 });
+
+describe("expense profiles with linked refunds", () => {
+    it.each([
+        { name: "weekday", profile: weekdayProfile, index: 0 },
+        { name: "day of month", profile: dayOfMonthProfile, index: 4 },
+    ])("nets same-day refunds in the $name bucket", ({ profile, index }) => {
+        const refunded = buildSnapshot({
+            transactions: [
+                { id: 1, date: "2026-01-05", amount: -1000, categoryId: 2 },
+                { id: 2, date: "2026-01-05", amount: 400, categoryId: 2, refundOfId: 1 },
+            ],
+        });
+        expect(monthlySeries(refunded)[0]?.[1].expense).toBe(600);
+        expect(profile(refunded, "2026")[index]).toBe(600);
+        expect(profile(refunded, "2026").reduce((sum, amount) => sum + amount, 0)).toBe(600);
+    });
+});

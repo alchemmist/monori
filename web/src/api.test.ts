@@ -59,7 +59,7 @@ const responseFor = (url: string, method?: string): unknown => {
     if (url.startsWith("/api/snapshot")) return snapshotResponse;
     if (url.startsWith("/api/transactions?")) return { total: 0, rows: [] };
     if (url.endsWith("/splits")) return { splits: [] };
-    if (url.endsWith("/refund-suggestions")) return { rows: [] };
+    if (url.includes("/refund-suggestions")) return { rows: [] };
     if (url.endsWith("/refund") && method === "PUT")
         return { ok: true, refundOfId: 1, categoryId: 2 };
     if (url.endsWith("/refund") && method === "DELETE") return { ok: true, categoryId: 2 };
@@ -229,6 +229,13 @@ const ENDPOINTS: Endpoint[] = [
         "refundSuggestions",
         () => api.refundSuggestions(2),
         "/api/transactions/2/refund-suggestions",
+        undefined,
+        undefined,
+    ],
+    [
+        "all eligible refund purchases",
+        () => api.refundSuggestions(2, true),
+        "/api/transactions/2/refund-suggestions?include_all=true",
         undefined,
         undefined,
     ],

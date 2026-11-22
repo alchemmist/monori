@@ -74,7 +74,7 @@ interface StoreState {
         txId: Id,
         parts: Array<Omit<TransactionSplit, "id">>,
     ) => Promise<TransactionSplit[] | undefined>;
-    refundSuggestions: (txId: Id) => Promise<Transaction[]>;
+    refundSuggestions: (txId: Id, includeAll?: boolean) => Promise<Transaction[]>;
     linkRefund: (txId: Id, originalId: Id) => Promise<void>;
     unlinkRefund: (txId: Id) => Promise<void>;
     deleteTransaction: (txId: Id) => Promise<boolean>;
@@ -759,9 +759,9 @@ export const useStore = create<StoreState>((set, get) => ({
         }
     },
 
-    async refundSuggestions(txId) {
+    async refundSuggestions(txId, includeAll = false) {
         const snapshot = requireSnapshot(get().snapshot);
-        if (!isDemo()) return (await api.refundSuggestions(txId)).rows;
+        if (!isDemo()) return (await api.refundSuggestions(txId, includeAll)).rows;
         const refund = snapshot.transactions.find((transaction) => transaction.id === txId);
         if (
             !refund ||
@@ -787,7 +787,10 @@ export const useStore = create<StoreState>((set, get) => ({
                     (transaction.splits?.length ?? 0) === 0 &&
                     transaction.date <= refund.date &&
                     -transaction.amount - (refunded.get(transaction.id) ?? 0) >= refund.amount &&
-                    ((merchant !== "" && refundMerchantKey(transaction.description) === merchant) ||
+                    (includeAll ||
+                        transaction.id === refund.refundOfId ||
+                        (merchant !== "" &&
+                            refundMerchantKey(transaction.description) === merchant) ||
                         -transaction.amount === refund.amount),
             )
             .reverse();

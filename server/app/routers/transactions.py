@@ -504,9 +504,11 @@ def patch_transaction(
 def refund_suggestions(
     refund_tx_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
+    *,
+    include_all: bool = False,
 ) -> RefundSuggestionsResponse:
     """
-    Suggest purchases that a positive transaction can refund.
+    Suggest purchases, or return every eligible purchase for manual selection.
     """
     uid = user.id
     c = conn()
@@ -546,7 +548,7 @@ def refund_suggestions(
             " WHERE c.id=t.category_id AND gt.transaction_sign=-1))"
             " AND t.id<>? AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id))"
             " WHERE -amount-used_refund>=?"
-            " AND (id=? OR -amount=? OR (?<>'' AND refund_merchant_key(description)=?))"
+            " AND (? OR id=? OR -amount=? OR (?<>'' AND refund_merchant_key(description)=?))"
             " ORDER BY CASE WHEN ?<>'' AND refund_merchant_key(description)=? THEN 0 ELSE 1 END,"
             " date DESC, id DESC",
             (
@@ -555,6 +557,7 @@ def refund_suggestions(
                 refund.date,
                 refund_tx_id,
                 refund.amount,
+                include_all,
                 current_id,
                 refund.amount,
                 key,
