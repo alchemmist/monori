@@ -271,6 +271,50 @@ describe("ImportPanel", () => {
         expect(screen.getAllByText("looks like a refund of Shop")).toHaveLength(1);
     });
 
+    it.each([
+        ["same day and exact remaining balance", "2026-07-02", 2000, false, true],
+        ["before purchase", "2026-07-01", 2000, false, false],
+        ["above remaining balance", "2026-07-02", 2001, false, false],
+        ["duplicate credit", "2026-07-02", 2000, true, false],
+        ["zero amount", "2026-07-02", 0, false, false],
+        ["debit", "2026-07-02", -100, false, false],
+    ] as const)(
+        "checks refund hint eligibility: %s",
+        async (_, date, amount, duplicate, eligible) => {
+            seed({
+                accounts,
+                transactions: [
+                    { id: 7, date: "2026-07-02", description: "Shop", amount: -2500 },
+                    {
+                        id: 8,
+                        date: "2026-07-02",
+                        description: "Credit",
+                        amount: 500,
+                        refundOfId: 7,
+                    },
+                ],
+            });
+            vi.spyOn(api, "importPreview").mockResolvedValue({
+                rows: [
+                    {
+                        date,
+                        amount,
+                        duplicate,
+                        description: "Shop refund",
+                        accountId: 1,
+                        categoryId: null,
+                        card: "",
+                    },
+                ],
+                errors: [],
+            });
+            const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
+            upload(container);
+            await screen.findByText("Shop refund");
+            expect(screen.queryByText("looks like a refund of Shop") !== null).toBe(eligible);
+        },
+    );
+
     it("does not suggest a split purchase as an import refund", async () => {
         seed({
             accounts,
