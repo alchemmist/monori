@@ -3,7 +3,9 @@
 
 import os
 import time
+from collections.abc import Callable, Iterator
 from contextlib import closing
+from typing import cast
 
 import psycopg
 from fastapi import HTTPException
@@ -104,35 +106,45 @@ TYPES = {
 }
 
 
-def nodes(x):
+def nodes(x: object) -> Iterator[dict[str, object]]:
+    """Yield PostgreSQL AST nodes from the parser's dictionary representation."""
     if isinstance(x, dict):
-        if "@" in x:
-            yield x
-        for v in x.values():
-            yield from nodes(v)
+        node = cast("dict[str, object]", x)
+        if "@" in node:
+            yield node
+        for value in node.values():
+            yield from nodes(value)
     elif isinstance(x, (tuple, list)):
-        for v in x:
-            yield from nodes(v)
+        for value in x:
+            yield from nodes(value)
 
 
-def plan(statement, scratch):
+def field_names(node: dict[str, object], field: str) -> list[str]:
+    """Extract string names from a parser node field."""
+    values = node.get(field)
+    if not isinstance(values, (tuple, list)):
+        return []
+    return [cast("str", value["sval"]) for value in values if isinstance(value, dict)]
+
+
+def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:  # noqa: C901, PLR0912
+    """Validate a statement and return its write flag and normalized SQL."""
     parsed = parse_sql(statement)
     if len(parsed) != 1:
-        raise ValueError("Expected exactly one statement")
+        raise ValueError("Expected exactly one statement")  # noqa: EM101, TRY003
     root = parsed[0].stmt
-    tree = root()
-    kind = tree["@"]
+    tree = cast("dict[str, object]", root())
+    kind = cast("str", tree["@"])
     all_nodes = list(nodes(tree))
-    ctes = {n["ctename"] for n in all_nodes if n["@"] == "CommonTableExpr"}
+    ctes = {cast("str", n["ctename"]) for n in all_nodes if n["@"] == "CommonTableExpr"}
     if kind not in {"CreateStmt", "SelectStmt", "UpdateStmt", "DeleteStmt", "InsertStmt"}:
-        raise ValueError("Unsupported console statement")
+        raise ValueError("Unsupported console statement")  # noqa: EM101, TRY003
     for n in all_nodes:
-        tag = n["@"]
-        names = lambda field: [x["sval"] for x in n.get(field) or ()]
+        tag = cast("str", n["@"])
         if tag not in NODES or (tag.endswith("Stmt") and n is not tree and tag != "SelectStmt"):
-            raise ValueError("Unsupported SQL operation")
+            raise ValueError("Unsupported SQL operation")  # noqa: EM101, TRY003
         if tag == "RangeVar":
-            rel = n["relname"]
+            rel = cast("str", n["relname"])
             schema = n.get("schemaname")
             creating = kind == "CreateStmt" and n is tree["relation"]
             if (
@@ -141,10 +153,10 @@ def plan(statement, scratch):
                 or rel == "information_schema"
                 or n.get("relpersistence") != "p"
             ):
-                raise ValueError("Relation outside console scope")
+                raise ValueError("Relation outside console scope")  # noqa: EM101, TRY003
             if creating:
                 if schema not in (None, "console_scratch") or rel in TABLES:
-                    raise ValueError("Create tables only in console_scratch")
+                    raise ValueError("Create tables only in console_scratch")  # noqa: EM101, TRY003
             elif not (
                 (rel in TABLES and schema in (None, "public"))
                 or (rel in scratch and schema in (None, "console_scratch"))
@@ -152,15 +164,15 @@ def plan(statement, scratch):
             ):
                 raise ValueError("Unknown console table: " + rel)
         elif tag == "FuncCall" and (
-            len(names("funcname")) != 1 or names("funcname")[0] not in FUNCTIONS
+            len(field_names(n, "funcname")) != 1 or field_names(n, "funcname")[0] not in FUNCTIONS
         ):
-            raise ValueError("Function outside console scope")
+            raise ValueError("Function outside console scope")  # noqa: EM101, TRY003
         elif tag == "TypeName" and (
-            names("names")[:-1] not in ([], ["pg_catalog"])
-            or names("names")[-1] not in TYPES
+            field_names(n, "names")[:-1] not in ([], ["pg_catalog"])
+            or field_names(n, "names")[-1] not in TYPES
             or n.get("arrayBounds")
         ):
-            raise ValueError("Unsupported console type")
+            raise ValueError("Unsupported console type")  # noqa: EM101, TRY003
         elif tag == "A_Expr" and any(
             v
             not in {
@@ -182,9 +194,9 @@ def plan(statement, scratch):
                 "!~~*",
                 "||",
             }
-            for v in names("name")
+            for v in field_names(n, "name")
         ):
-            raise ValueError("Unsupported operator")
+            raise ValueError("Unsupported operator")  # noqa: EM101, TRY003
         elif tag == "CreateStmt" and any(
             n.get(k)
             for k in (
@@ -197,12 +209,13 @@ def plan(statement, scratch):
                 "options",
             )
         ):
-            raise ValueError("Only plain scratch tables are supported")
+            raise ValueError("Only plain scratch tables are supported")  # noqa: EM101, TRY003
         elif tag == "SortBy" and n.get("useOp"):
-            raise ValueError("Unsupported ordering operator")
+            raise ValueError("Unsupported ordering operator")  # noqa: EM101, TRY003
     if kind == "CreateStmt":
         root.relation.schemaname = "console_scratch"
-    return kind != "SelectStmt", RawStream()(root)
+    raw_stream_factory = cast("Callable[[], Callable[[object], str]]", RawStream)
+    return kind != "SelectStmt", raw_stream_factory()(root)
 
 
 def run(body, uid):
