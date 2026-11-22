@@ -168,6 +168,16 @@ erDiagram
         TEXT subject PK
         INTEGER user_id FK "-> users.id, required"
     }
+    reconcile_events {
+        INTEGER id PK
+        INTEGER account_id FK "-> accounts.id, required"
+        INTEGER user_id FK "-> users.id, required"
+        TEXT created_at "required"
+        INTEGER actual_balance "required"
+        INTEGER computed_balance "required"
+        INTEGER delta "required"
+        INTEGER adjustment_tx_id FK "-> transactions.id"
+    }
     category_group_types ||--o{ category_groups : "type_id"
     users |o--o{ category_groups : "user_id"
     category_groups ||--o{ categories : "group_id"
@@ -194,6 +204,9 @@ erDiagram
     users ||--o{ activity_events : "user_id"
     users ||--o{ feature_usage : "user_id"
     users ||--o{ oidc_identities : "user_id"
+    transactions |o--o{ reconcile_events : "adjustment_tx_id"
+    users ||--o{ reconcile_events : "user_id"
+    accounts ||--o{ reconcile_events : "account_id"
 ```
 
 <!-- schema-diagram:end -->

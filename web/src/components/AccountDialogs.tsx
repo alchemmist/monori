@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { Button } from "@mantine/core";
 import { TrashBin } from "@gravity-ui/icons";
-import { useStore } from "../store.js";
+import { isDemo, useStore } from "../store.js";
 import { parseRub, money, amountInput } from "../format.js";
 import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
 import { DEFAULT_CURRENCY, currencyOptions } from "../currencies.js";
@@ -10,7 +11,7 @@ import AppDialog from "../ui/AppDialog.jsx";
 import Tab from "../ui/Tab.jsx";
 import { FAmountInput, FSelect, FTextInput } from "../ui/fields.jsx";
 import Txt from "../ui/Txt.jsx";
-import type { Account } from "../types.js";
+import type { Account, ReconcileEvent } from "../types.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -345,7 +346,23 @@ export function AccountReconcileDialog({
     balance: number;
     onClose: () => void;
 }) {
-    const { reconcileAccount, notify } = useStore();
+    const { reconcileAccount, reconcileHistory, notify } = useStore();
+    const [history, setHistory] = useState<ReconcileEvent[] | "failed" | null>(null);
+    useEffect(() => {
+        let current = true;
+        setHistory(null);
+        void reconcileHistory(account.id).then(
+            (rows) => {
+                if (current) setHistory(rows);
+            },
+            () => {
+                if (current) setHistory("failed");
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [account.id, reconcileHistory]);
     const [actual, setActual] = useState(amountInput(balance));
     const [busy, setBusy] = useState(false);
     const actualKop = parseRub(actual);
@@ -393,6 +410,40 @@ export function AccountReconcileDialog({
                     onChange={setActual}
                     autoFocus
                 />
+                {history === null ? (
+                    <Txt>Loading reconciliation history…</Txt>
+                ) : history === "failed" ? (
+                    <Txt>Could not load reconciliation history.</Txt>
+                ) : !history.length ? (
+                    <Txt>No reconciliations recorded.</Txt>
+                ) : (
+                    <details>
+                        <summary>
+                            Last reconciled: {new Date(history[0]!.createdAt).toLocaleString()}
+                        </summary>
+                        <ol aria-label="Recent reconciliations">
+                            {history.map((event) => (
+                                <li key={event.id}>
+                                    {new Date(event.createdAt).toLocaleString()} · Computed{" "}
+                                    {money(event.computedBalance)} · Actual{" "}
+                                    {money(event.actualBalance)} · Difference {money(event.delta)}
+                                    {event.adjustmentTxId != null && (
+                                        <>
+                                            {" "}
+                                            ·{" "}
+                                            <Link
+                                                onClick={onClose}
+                                                to={`${isDemo() ? "/demo" : ""}/transactions?transactionId=${event.adjustmentTxId}`}
+                                            >
+                                                Adjustment #{event.adjustmentTxId}
+                                            </Link>
+                                        </>
+                                    )}
+                                </li>
+                            ))}
+                        </ol>
+                    </details>
+                )}
                 {delta != null && delta !== 0 && (
                     <Txt tone="secondary" caption>
                         An adjustment of {money(delta)} will be posted so the account matches your

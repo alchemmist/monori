@@ -126,7 +126,17 @@ export interface Connection {
     updatedAt: string;
 }
 
+export interface ReconcileEvent {
+    id: Id;
+    createdAt: string;
+    actualBalance: number;
+    computedBalance: number;
+    delta: number;
+    adjustmentTxId: Id | null;
+}
+
 export interface Snapshot {
+    demoReconciles?: Record<Id, ReconcileEvent[]>;
     accounts: Account[];
     groups: CategoryGroup[];
     categories: Category[];

@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
@@ -93,6 +94,33 @@ describe("account dialogs", () => {
         await waitFor(() => expect(reconcile).toHaveBeenCalledWith(1, 10250));
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ theme: "success" }));
         expect(close).toHaveBeenCalled();
+    });
+
+    it("displays the most recent receipt and a link only for an actual adjustment", async () => {
+        seed({ accounts: [account] });
+        const event = {
+            id: 2,
+            createdAt: "2026-03-04T12:00:00Z",
+            computedBalance: 9000,
+            actualBalance: 9000,
+            delta: 0,
+            adjustmentTxId: null,
+        };
+        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([
+            event,
+            { ...event, id: 1, computedBalance: 7500, delta: 1500, adjustmentTxId: 42 },
+        ]);
+        const { user } = renderUI(
+            <MemoryRouter>
+                <AccountReconcileDialog account={account} balance={9000} onClose={vi.fn()} />
+            </MemoryRouter>,
+        );
+        await user.click(await screen.findByText(/Last reconciled:/));
+        expect(screen.getAllByRole("listitem")).toHaveLength(2);
+        expect(screen.getByRole("link", { name: "Adjustment #42" })).toHaveAttribute(
+            "href",
+            "/transactions?transactionId=42",
+        );
     });
 
     it("updates an existing account and reports a failed save", async () => {

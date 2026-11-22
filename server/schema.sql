@@ -220,3 +220,15 @@ CREATE TABLE IF NOT EXISTS oidc_identities (
   PRIMARY KEY (issuer, subject)
 );
 CREATE INDEX IF NOT EXISTS idx_oidc_identities_user_id ON oidc_identities (user_id);
+
+CREATE TABLE IF NOT EXISTS reconcile_events (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    actual_balance INTEGER NOT NULL,
+    computed_balance INTEGER NOT NULL,
+    delta INTEGER NOT NULL CHECK (delta = actual_balance - computed_balance),
+    adjustment_tx_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_reconcile_events_account ON reconcile_events (account_id, id DESC);

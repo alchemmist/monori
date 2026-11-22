@@ -8,11 +8,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
+from typing_extensions import TypedDict
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
-from monori.server.app.db import DatabaseConnection
-from monori.server.app.db_records import AccountRecord, row_int, row_str
+from monori.server.app.db import DatabaseConnection, begin_write
+from monori.server.app.db_records import AccountRecord, row_int, row_optional_int, row_str
 from monori.server.app.deps import AccountResponse, conn, serialize_account
 from monori.server.app.domain_types import AccountType
 from monori.server.app.importer import tx_hash
@@ -429,6 +430,7 @@ def reconcile_account(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         acc = c.execute(
             "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?",
             (account_id, uid),
@@ -447,16 +449,25 @@ def reconcile_account(
             row_int(total, "total") if total is not None else 0
         )
         delta = body.actual_balance - current
+        now = datetime.now(UTC)
+        adjustment_id = None
         if delta != 0:
-            date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+            date = now.strftime("%Y-%m-%dT%H:%M:%S")
             desc = "Reconcile adjustment"
-            c.execute(
+            adjustment_id = c.execute(
                 """INSERT INTO transactions
                    (date, amount, description, account_id, hash, source)
                    VALUES (?, ?, ?, ?, ?, 'adjustment')""",
                 (date, delta, desc, account_id, tx_hash(account_id, date, delta, desc)),
-            )
-            c.commit()
+            ).lastrowid
+        c.execute(
+            "INSERT INTO reconcile_events "
+            "(account_id,user_id,created_at,actual_balance,"
+            "computed_balance,delta,adjustment_tx_id) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (account_id, uid, now.isoformat(), body.actual_balance, current, delta, adjustment_id),
+        )
+        c.commit()
         return {"delta": delta}
     finally:
         c.close()
@@ -480,5 +491,44 @@ def reorder_accounts(
             c.execute("UPDATE accounts SET sort=? WHERE id=?", (sort, aid))
         c.commit()
         return {"ok": True}
+    finally:
+        c.close()
+
+
+class ReconcileReceipt(TypedDict):
+    """Immutable balances with a nullable link to the live adjustment."""
+
+    id: int
+    createdAt: str
+    actualBalance: int
+    computedBalance: int
+    delta: int
+    adjustmentTxId: int | None
+
+
+@router.get("/{account_id}/reconciles")
+def reconcile_history(
+    account_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> list[ReconcileReceipt]:
+    """Return the most recent 50 reconciliation receipts, newest first."""
+    c = conn()
+    try:
+        _require_account(c, account_id, user.id)
+        rows = c.execute(
+            "SELECT id,created_at,actual_balance,computed_balance,delta,adjustment_tx_id "
+            "FROM reconcile_events WHERE account_id=? AND user_id=? ORDER BY id DESC LIMIT 50",
+            (account_id, user.id),
+        ).fetchall()
+        return [
+            {
+                "id": row_int(row, "id"),
+                "createdAt": row_str(row, "created_at"),
+                "actualBalance": row_int(row, "actual_balance"),
+                "computedBalance": row_int(row, "computed_balance"),
+                "delta": row_int(row, "delta"),
+                "adjustmentTxId": row_optional_int(row, "adjustment_tx_id"),
+            }
+            for row in rows
+        ]
     finally:
         c.close()
