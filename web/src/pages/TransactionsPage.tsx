@@ -64,10 +64,8 @@ export default function TransactionsPage() {
         notify,
     } = useStore();
     if (!snapshot) throw new Error("transactions page requires a loaded snapshot");
-    const linkedId = new URLSearchParams(window.location.search).get("transactionId");
-    const [query, setQuery] = useState(
-        linkedId != null && /^\d+$/.test(linkedId) ? `#${linkedId}` : "",
-    );
+    const linkedId = String(new URLSearchParams(window.location.search).get("transactionId"));
+    const [query, setQuery] = useState(/^\d+$/.test(linkedId) ? `#${linkedId}` : "");
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
@@ -219,8 +217,8 @@ export default function TransactionsPage() {
                     t.categoryId === +catFilter ||
                     (t.splits?.some((part) => part.categoryId === +catFilter) ?? false),
             );
-        if (/^#\d+$/.test(q)) rows = rows.filter((t) => t.id === Number(q.slice(1)));
-        else if (q !== "")
+        if (/^#\d+$/.test(q)) return rows.filter((t) => t.id === Number(q.slice(1)));
+        if (q !== "")
             rows = rows.filter(
                 (t) =>
                     t.description.toLowerCase().includes(q) ||

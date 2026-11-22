@@ -96,6 +96,7 @@ describe("App", () => {
         const budget = await screen.findByRole("link", { name: "Budget" });
         expect(screen.getByRole("heading", { name: "Budget" })).toBeInTheDocument();
 
+        expect(screen.queryByRole("heading", { name: "Transactions" })).not.toBeInTheDocument();
         const transactions = screen.getByRole("link", { name: "Transactions" });
         await user.click(transactions);
         await waitFor(() =>

@@ -246,8 +246,8 @@ export const api = {
         })
             .then(json(okResponseSchema))
             .then(() => undefined),
-    reconcileHistory: (id: Id): Promise<ReconcileEvent[]> =>
-        apiFetch(`/api/accounts/${id}/reconciles`).then(
+    reconcileHistory(id: Id): Promise<ReconcileEvent[]> {
+        return apiFetch(`/api/accounts/${id}/reconciles`).then(
             json(
                 z.array(
                     z.object({
@@ -260,7 +260,8 @@ export const api = {
                     }),
                 ),
             ),
-        ),
+        );
+    },
     reconcileAccount: (id: Id, actualBalance: number): Promise<{ delta: number }> =>
         apiFetch(`/api/accounts/${id}/reconcile`, {
             method: "POST",
