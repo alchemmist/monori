@@ -13,6 +13,7 @@ type StubProps = {
 
 // each stub reports the props it was handed and exposes its close callback
 vi.mock("./AccountDialogs.jsx", () => ({
+    AccountReconcileTab: ({ balance }: { balance: number }) => <output>{balance}</output>,
     AccountEditTab: (props: StubProps) => (
         <div data-testid="account-edit" data-account={props.account?.name ?? ""}>
             <button onClick={props.onClose}>close account-edit</button>
@@ -58,6 +59,22 @@ describe("TabHost", () => {
     beforeEach(() => {
         resetStore();
         seed();
+    });
+
+    it("keeps the restored reconcile tab until the snapshot loads and closes it only if its account disappears", async () => {
+        useStore.setState({ snapshot: null });
+        openTabs({ id: 1, kind: "account-reconcile", props: { accountId: 1 }, key: null });
+        renderUI(<TabHost />);
+        expect(useStore.getState().tabs).toHaveLength(1);
+        seed({
+            accounts: [
+                { id: 2, openingBalance: 300 },
+                { id: 1, openingBalance: 12345 },
+            ],
+        });
+        expect(await screen.findByText("12345")).toBeInTheDocument();
+        seed({ accounts: [] });
+        await waitFor(() => expect(useStore.getState().tabs).toHaveLength(0));
     });
 
     it("hands the account row of the open tab to the account editor", () => {

@@ -54,7 +54,7 @@ function ReconcileHost({ id, onClose }: { id: unknown; onClose: () => void }) {
     return account && snapshot ? (
         <AccountReconcileTab
             account={account}
-            balance={accountBalances(snapshot).get(account.id) ?? 0}
+            balance={accountBalances(snapshot).get(account.id)!}
             onClose={onClose}
         />
     ) : null;
