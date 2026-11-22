@@ -226,6 +226,81 @@ describe("account dialogs", () => {
         },
     );
 
+    it.each(["success", "rejection"])(
+        "reload clears shown history and a stale %s cannot displace the newer reload",
+        async (outcome) => {
+            const rows = (createdAt: string): ReconcileEvent[] => [
+                {
+                    id: 1,
+                    createdAt,
+                    computedBalance: 10000,
+                    actualBalance: 10250,
+                    delta: 250,
+                    adjustmentTxId: null,
+                },
+            ];
+            const stamp = (createdAt: string) =>
+                new Intl.DateTimeFormat(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                }).format(new Date(createdAt));
+            const defer = (): {
+                promise: Promise<ReconcileEvent[]>;
+                resolve: (rows: ReconcileEvent[]) => void;
+                reject: (error: Error) => void;
+            } => {
+                let resolve!: (rows: ReconcileEvent[]) => void;
+                let reject!: (error: Error) => void;
+                const promise = new Promise<ReconcileEvent[]>((res, rej) => {
+                    resolve = res;
+                    reject = rej;
+                });
+                return { promise, resolve, reject };
+            };
+            const initial = defer();
+            const superseded = defer();
+            const latest = defer();
+            vi.spyOn(useStore.getState(), "reconcileHistory")
+                .mockReturnValueOnce(initial.promise)
+                .mockReturnValueOnce(superseded.promise)
+                .mockReturnValueOnce(latest.promise);
+            vi.spyOn(useStore.getState(), "reconcileAccount").mockResolvedValue({ delta: 250 });
+            const { user } = renderUI(
+                <AccountReconcileTab account={account} balance={10000} onClose={vi.fn()} />,
+            );
+            await act(async () => {
+                initial.resolve(rows("2026-03-01T00:00:00Z"));
+            });
+            expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(
+                stamp("2026-03-01T00:00:00Z"),
+            );
+
+            await user.click(screen.getByRole("button", { name: "Reconcile" }));
+            expect(await screen.findByText("Loading reconciliation history…")).toBeVisible();
+            expect(screen.queryByText(/Last reconciled:/)).not.toBeInTheDocument();
+
+            await user.type(screen.getByLabelText("Actual bank balance"), "102.50");
+            await user.click(screen.getByRole("button", { name: "Reconcile" }));
+            await act(async () => {
+                latest.resolve(rows("2026-03-09T00:00:00Z"));
+            });
+            expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(
+                stamp("2026-03-09T00:00:00Z"),
+            );
+
+            await act(async () => {
+                if (outcome === "success") superseded.resolve(rows("2026-03-05T00:00:00Z"));
+                else superseded.reject(new Error("stale"));
+            });
+            expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(
+                stamp("2026-03-09T00:00:00Z"),
+            );
+            expect(
+                screen.queryByText("Could not load reconciliation history."),
+            ).not.toBeInTheDocument();
+        },
+    );
+
     it.each(["", "/demo"])("displays receipts and adjustment links under %s", async (prefix) => {
         setPath(`${prefix}/accounts`);
         seed({ accounts: [account] });
