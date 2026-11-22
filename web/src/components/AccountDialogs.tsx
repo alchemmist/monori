@@ -348,7 +348,7 @@ export function AccountReconcileTab({
 }) {
     const { reconcileAccount, reconcileHistory, notify } = useStore();
     const [history, setHistory] = useState<ReconcileEvent[] | "failed" | null>(null);
-    const [historyVersion, refreshHistory] = useState(false);
+    const [historyVersion, refreshHistory] = useState<symbol>();
     useEffect(() => {
         let current = true;
         setHistory(null);
@@ -386,7 +386,7 @@ export function AccountReconcileTab({
                 theme: "success",
             });
             setActual(null);
-            refreshHistory((previous) => !previous);
+            refreshHistory(Symbol());
         } catch (e) {
             notify({ title: "Failed to reconcile", theme: "danger", content: String(e) });
         } finally {
