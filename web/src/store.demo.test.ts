@@ -224,11 +224,19 @@ describe("reconcileAccount in the demo", () => {
         expect(await store.reconcileHistory(1)).toEqual([]);
         await store.reconcileAccount(1, 200);
         await store.reconcileAccount(1, 210);
-        await store.deleteTransaction(8);
-        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([9, null]);
+        const [latest, earlier] = await store.reconcileHistory(1);
+        expect(latest!.adjustmentTxId).not.toBeNull();
+        expect(earlier!.adjustmentTxId).not.toBeNull();
+        await store.deleteTransaction(earlier!.adjustmentTxId!);
+        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([
+            latest!.adjustmentTxId,
+            null,
+        ]);
         for (let i = 0; i < 50; i++) await store.reconcileAccount(1, 160);
         const rows = await store.reconcileHistory(1);
-        expect(rows.map((r) => r.id)).toEqual(Array.from({ length: 50 }, (_, i) => 52 - i));
+        expect(rows.map((r) => r.id)).toEqual(
+            Array.from({ length: 50 }, (_, i) => latest!.id + 50 - i),
+        );
     });
 
     it("does not relink a deleted adjustment when a demo ID is reused", async () => {

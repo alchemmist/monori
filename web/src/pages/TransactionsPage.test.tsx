@@ -37,6 +37,7 @@ const categories = [
 
 describe("TransactionsPage", () => {
     beforeEach(() => {
+        window.history.replaceState({}, "", "/transactions");
         resetStore();
         vi.clearAllMocks();
     });
