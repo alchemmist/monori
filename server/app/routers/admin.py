@@ -16,8 +16,15 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app import auth
+from monori.server.app import db as dbmod
 from monori.server.app.admin import admin_user
-from monori.server.app.db_records import UserRecord
+from monori.server.app.db_records import (
+    UserRecord,
+    db_int,
+    row_int,
+    row_optional_str,
+    row_str,
+)
 from monori.server.app.deps import UserResponse, conn, serialize_user
 from monori.server.app.routers.auth_router import create_user
 
@@ -40,20 +47,20 @@ def _cutoff(days: int) -> str:
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _count(c: sqlite3.Connection, sql: str) -> int:
+def _count(c: dbmod.DatabaseConnection, sql: str) -> int:
     row = c.execute(sql).fetchone()
-    if row is None or not isinstance(row[0], int):
+    if row is None:
         msg = "count query did not return an integer"
         raise RuntimeError(msg)
-    return row[0]
+    return db_int(row[0], "count")
 
 
-def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
+def _count_since(c: dbmod.DatabaseConnection, sql: str, since: str) -> int:
     row = c.execute(sql, (since,)).fetchone()
-    if row is None or not isinstance(row[0], int):
+    if row is None:
         msg = "count query did not return an integer"
         raise RuntimeError(msg)
-    return row[0]
+    return db_int(row[0], "count")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -202,7 +209,7 @@ def overview() -> OverviewResponse:
             " UNION SELECT user_id FROM activity_events WHERE created_at >= ?)",
             (cutoff7[:10], cutoff7),
         ).fetchone()
-        if active_row is None or not isinstance(active_row[0], int):
+        if active_row is None:
             msg = "active user query did not return an integer"
             raise RuntimeError(msg)
         return OverviewResponse(
@@ -223,9 +230,9 @@ def overview() -> OverviewResponse:
                 "SELECT COUNT(*) FROM users WHERE created_at >= ?",
                 cutoff30,
             ),
-            active_users_7d=active_row[0],
+            active_users_7d=db_int(active_row[0], "active_users"),
             registrations=[
-                RegistrationCount(month=r["m"], count=r["n"])
+                RegistrationCount(month=row_str(r, "m"), count=row_int(r, "n"))
                 for r in c.execute(
                     "SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM users"
                     " GROUP BY m ORDER BY m",
@@ -245,23 +252,23 @@ def list_users() -> list[AdminUserSummary]:
         for r in c.execute(
             "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id",
         ):
-            connections[r["user_id"]] = AdminConnectionSummary(
-                status=r["status"],
-                last_sync=r["last_sync"],
-                last_error=r["last_error"],
+            connections[row_int(r, "user_id")] = AdminConnectionSummary(
+                status=row_str(r, "status"),
+                last_sync=row_optional_str(r, "last_sync"),
+                last_error=row_optional_str(r, "last_error"),
             )
         return [
             AdminUserSummary(
-                id=r["id"],
-                email=r["email"],
-                created_at=r["created_at"],
-                last_login=r["last_login"],
-                is_admin=bool(r["is_admin"]),
-                accounts=r["accounts"],
-                transactions=r["transactions"],
-                last_transaction=r["last_tx"],
-                budgets=r["budgets"],
-                connection=connections.get(r["id"]),
+                id=row_int(r, "id"),
+                email=row_str(r, "email"),
+                created_at=row_str(r, "created_at"),
+                last_login=row_optional_str(r, "last_login"),
+                is_admin=bool(row_int(r, "is_admin")),
+                accounts=row_int(r, "accounts"),
+                transactions=row_int(r, "transactions"),
+                last_transaction=row_optional_str(r, "last_tx"),
+                budgets=row_int(r, "budgets"),
+                connection=connections.get(row_int(r, "id")),
             )
             for r in c.execute(
                 "SELECT u.id, u.email, u.created_at, u.last_login, u.is_admin,"
@@ -298,13 +305,13 @@ def user_detail(
             user=serialize_user(UserRecord.from_row(row)),
             accounts=[
                 AdminAccountSummary(
-                    id=r["id"],
-                    name=r["name"],
-                    type=r["type"],
-                    currency=r["currency"],
-                    archived=bool(r["archived"]),
-                    balance=r["balance"],
-                    transactions=r["tx_count"],
+                    id=row_int(r, "id"),
+                    name=row_str(r, "name"),
+                    type=row_str(r, "type"),
+                    currency=row_str(r, "currency"),
+                    archived=bool(row_int(r, "archived")),
+                    balance=row_int(r, "balance"),
+                    transactions=row_int(r, "tx_count"),
                 )
                 for r in c.execute(
                     "SELECT a.id, a.name, a.type, a.currency, a.archived,"
@@ -319,12 +326,12 @@ def user_detail(
             ],
             recent_transactions=[
                 AdminTransactionSummary(
-                    id=r["id"],
-                    date=r["date"],
-                    amount=r["amount"],
-                    description=r["description"],
-                    account=r["account_name"],
-                    category=r["category_name"],
+                    id=row_int(r, "id"),
+                    date=row_str(r, "date"),
+                    amount=row_int(r, "amount"),
+                    description=row_str(r, "description"),
+                    account=row_str(r, "account_name"),
+                    category=row_optional_str(r, "category_name"),
                 )
                 for r in c.execute(
                     "SELECT t.id, t.date, t.amount, t.description,"
@@ -336,7 +343,7 @@ def user_detail(
                 )
             ],
             feature_usage=[
-                FeatureCount(feature=r["feature"], count=r["n"])
+                FeatureCount(feature=row_str(r, "feature"), count=row_int(r, "n"))
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE user_id=?"
                     " GROUP BY feature ORDER BY n DESC",
@@ -344,7 +351,7 @@ def user_detail(
                 )
             ],
             recent_logins=[
-                r["created_at"]
+                row_str(r, "created_at")
                 for r in c.execute(
                     "SELECT created_at FROM activity_events WHERE user_id=? AND kind='login'"
                     " ORDER BY id DESC LIMIT ?",
@@ -375,15 +382,15 @@ def user_transactions(
             raise HTTPException(404, "unknown user")
         return [
             AdminTransactionDetail(
-                id=r["id"],
-                date=r["date"],
-                amount=r["amount"],
-                description=r["description"],
-                account=r["account_name"],
-                category=r["category_name"],
-                mcc=r["mcc"],
-                comment=r["comment"],
-                source=r["source"],
+                id=row_int(r, "id"),
+                date=row_str(r, "date"),
+                amount=row_int(r, "amount"),
+                description=row_str(r, "description"),
+                account=row_str(r, "account_name"),
+                category=row_optional_str(r, "category_name"),
+                mcc=row_str(r, "mcc"),
+                comment=row_str(r, "comment"),
+                source=row_str(r, "source"),
             )
             for r in c.execute(
                 "SELECT t.id, t.date, t.amount, t.description, t.mcc, t.comment, t.source,"
@@ -459,6 +466,8 @@ def create_user_admin(
     """Handle create user admin."""
     c = conn()
     try:
+        if not isinstance(c, sqlite3.Connection):
+            raise HTTPException(501, "admin user creation is not supported by this database")
         return create_user(c, body.email, body.password)
     finally:
         c.close()
@@ -503,7 +512,7 @@ def activity() -> ActivityResponse:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]
         return ActivityResponse(
             features=[
-                FeatureCount(feature=r["feature"], count=r["n"])
+                FeatureCount(feature=row_str(r, "feature"), count=row_int(r, "n"))
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE day >= ?"
                     " GROUP BY feature ORDER BY n DESC",
@@ -511,7 +520,7 @@ def activity() -> ActivityResponse:
                 )
             ],
             daily=[
-                DayCount(day=r["day"], count=r["n"])
+                DayCount(day=row_str(r, "day"), count=row_int(r, "n"))
                 for r in c.execute(
                     "SELECT day, SUM(count) AS n FROM feature_usage WHERE day >= ?"
                     " GROUP BY day ORDER BY day",
@@ -519,7 +528,7 @@ def activity() -> ActivityResponse:
                 )
             ],
             recent_logins=[
-                LoginEvent(email=r["email"], at=r["created_at"])
+                LoginEvent(email=row_str(r, "email"), at=row_str(r, "created_at"))
                 for r in c.execute(
                     "SELECT u.email, e.created_at FROM activity_events e"
                     " JOIN users u ON u.id = e.user_id WHERE e.kind='login'"
