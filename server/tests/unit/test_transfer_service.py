@@ -99,7 +99,7 @@ def test_link_and_split_preserve_legs_categories_and_metadata(
     transfer_id = service.link(ledger, 1, service.LinkRequest(101, 102, note="Move to savings"))
 
     assert len(transfer_id) == 32
-    int(transfer_id, 16)
+    assert f"{int(transfer_id, 16):032x}" == transfer_id
     assert tx_state(ledger) == [(101, -5000, None, transfer_id), (102, 5000, None, transfer_id)]
     assert service.rejections(ledger, 1) == {(102, 101)}
     [response] = service.list_transfers(ledger, 1)

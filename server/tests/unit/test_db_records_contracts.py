@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
+from enum import StrEnum
 from typing import cast
 
 import pytest
@@ -290,10 +291,14 @@ def test_record_adapters_preserve_every_selected_field(
     make_row: Callable[[dict[str, Cell]], DatabaseRow],
     expected: RecordValue,
 ) -> None:
-    values = {
-        key: int(value) if isinstance(value, bool) else value
-        for key, value in asdict(expected).items()
-    }
+    values: dict[str, Cell] = {}
+    for key, value in asdict(expected).items():
+        if isinstance(value, bool):
+            values[key] = int(value)
+        elif isinstance(value, StrEnum):
+            values[key] = value.value
+        else:
+            values[key] = value
     if isinstance(expected, ConnectionRecord):
         del values["has_credentials"]
         values["credentials_encrypted"] = b"encrypted"
