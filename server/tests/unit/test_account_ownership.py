@@ -22,13 +22,15 @@ def db(tmp_path: Path) -> Iterator[DatabaseConnection]:
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
         " VALUES ('b@example.com', 'b@example.com', 'x', '2026-01-01T00:00:00')"
     )
-    connection.execute("INSERT INTO accounts (user_id, name, sort) VALUES (1, 'A cash', 1)")
-    connection.execute("INSERT INTO accounts (user_id, name, sort) VALUES (2, 'B cash', 1)")
-    connection.execute("UPDATE accounts SET id=10 WHERE user_id=1 AND name='A cash'")
-    connection.execute("UPDATE accounts SET id=20 WHERE user_id=2 AND name='B cash'")
+    connection.execute("INSERT INTO accounts (id, user_id, name, sort) VALUES (10, 1, 'A cash', 1)")
+    connection.execute("INSERT INTO accounts (id, user_id, name, sort) VALUES (20, 2, 'B cash', 1)")
     connection.execute(
         "INSERT INTO bank_connections (id, user_id, bank, kind, created_at, updated_at)"
         " VALUES (100, 1, 'tbank', 'tbank', '2026-01-01T00:00:00', '2026-01-01T00:00:00')"
+    )
+    connection.execute(
+        "INSERT INTO bank_connections (id, user_id, bank, kind, created_at, updated_at)"
+        " VALUES (200, 2, 'tbank', 'tbank', '2026-01-01T00:00:00', '2026-01-01T00:00:00')"
     )
     yield connection
     connection.close()
@@ -55,6 +57,14 @@ def test_owned_connection_accepts_owner(db: DatabaseConnection) -> None:
 
 
 def test_owned_connection_rejects_foreign_connection_with_400(db: DatabaseConnection) -> None:
+    with pytest.raises(HTTPException) as err:
+        _owned_connection(db, 200, 1)
+    assert (err.value.status_code, err.value.detail) == (400, "unknown connection")
+
+
+def test_owned_connection_rejects_connection_owned_by_the_other_user(
+    db: DatabaseConnection,
+) -> None:
     with pytest.raises(HTTPException) as err:
         _owned_connection(db, 100, 2)
     assert (err.value.status_code, err.value.detail) == (400, "unknown connection")
