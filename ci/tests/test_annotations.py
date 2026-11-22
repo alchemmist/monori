@@ -1,4 +1,5 @@
 # Copyright (c) 2026
+from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -69,3 +70,90 @@ def test_workflow_commands_escape_and_publish_omission_notice() -> None:
         stream=overflow,
     )
     assert "::notice::More findings" in overflow.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "start_column", "end_column", "error"),
+    [
+        (2, 1, None, None, "line range"),
+        (1, 1, None, 1, "provided together"),
+        (1, 1, 0, 1, "positive ordered"),
+        (1, 1, 2, 1, "positive ordered"),
+        (1, 2, 1, 2, "positive ordered"),
+    ],
+)
+def test_invalid_ranges_are_rejected_independently(
+    start: int, end: int, start_column: int | None, end_column: int | None, error: str
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        SourceAnnotation(
+            "a.py", start, end, "bad", start_column=start_column, end_column=end_column
+        )
+
+
+def test_json_serialization_preserves_all_fields_and_optional_values() -> None:
+    annotation = SourceAnnotation("a.py", 3, 3, "message", AnnotationLevel.NOTICE, "title", 1, 4)
+    assert annotation.to_json() == {
+        "path": "a.py",
+        "startLine": 3,
+        "endLine": 3,
+        "message": "message",
+        "level": "notice",
+        "title": "title",
+        "startColumn": 1,
+        "endColumn": 4,
+    }
+    assert SourceAnnotation.from_json(annotation.to_json()) == annotation
+    assert SourceAnnotation.from_json(
+        {
+            "path": "b.py",
+            "startLine": 1,
+            "endLine": 2,
+            "message": "m",
+            "level": "warning",
+        }
+    ) == SourceAnnotation("b.py", 1, 2, "m", AnnotationLevel.WARNING)
+    with pytest.raises(ValueError, match="invalid"):
+        SourceAnnotation.from_json(
+            {
+                "path": "b.py",
+                "startLine": 1,
+                "endLine": 1,
+                "message": "m",
+                "level": "invalid",
+            }
+        )
+
+
+def test_grouping_distinguishes_every_location_property_and_deduplicates_messages() -> None:
+    base = SourceAnnotation("a.py", 1, 1, "first", AnnotationLevel.WARNING, "title", 1, 2)
+
+    distinct = [
+        replace(base, path="b.py"),
+        replace(base, start_line=2, end_line=2),
+        replace(base, end_line=2, start_column=None, end_column=None),
+        replace(base, level=AnnotationLevel.NOTICE),
+        replace(base, title="other"),
+        replace(base, start_column=2),
+        replace(base, end_column=3),
+    ]
+    result = grouped_annotations([base, replace(base, message="second"), base, *distinct])
+    assert result == (replace(base, message="first\nsecond"), *distinct)
+
+
+def test_publishing_commands_and_notice_have_exact_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    annotation = SourceAnnotation("a%:,.py", 1, 2, "bad%\r\nnext", AnnotationLevel.NOTICE)
+    publish_workflow_annotations(iter([annotation]), omitted_message="unused")
+    assert capsys.readouterr().err == (
+        "::notice file=a%25%3A%2C.py,line=1,endLine=2::bad%25%0D%0Anext\n"
+    )
+    stream = StringIO()
+    publish_workflow_annotations(
+        [annotation, annotation], omitted_message="more%\r\nfindings", stream=stream
+    )
+    assert stream.getvalue() == (
+        "::notice file=a%25%3A%2C.py,line=1,endLine=2::bad%25%0D%0Anext\n"
+        "::notice::more%25%0D%0Afindings\n"
+    )
