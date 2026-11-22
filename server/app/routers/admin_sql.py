@@ -113,7 +113,7 @@ class SqlDryResponse(SqlResponse):
 
 
 @router.post("/sql")
-def run_sql(
+def run_sql(  # noqa: PLR0915
     body: SqlBody,
     admin: Annotated[AuthenticatedUser, Depends(admin_user)],
 ) -> SqlResponse | SqlDryResponse:
@@ -132,6 +132,13 @@ def run_sql(
     count, and nothing is ever committed.
     """
     if os.environ.get("MONORI_DATABASE_URL"):
+
+        def sqlite_conn() -> sqlite3.Connection:
+            connection = conn()
+            if not isinstance(connection, sqlite3.Connection):
+                raise TypeError("SQLite connection required for SQL audit")  # noqa: EM101, TRY003
+            return connection
+
         return run_pg_console(
             body,
             admin.id,
@@ -140,7 +147,7 @@ def run_sql(
             row_limit=ROW_LIMIT,
             cell=cell,
             audit=_audit,
-            conn=conn,
+            conn=sqlite_conn,
             response=SqlResponse,
             dry_response=SqlDryResponse,
         )
@@ -150,6 +157,8 @@ def run_sql(
         raise HTTPException(400, "empty statement")
 
     c = conn()
+    if not isinstance(c, sqlite3.Connection):
+        raise TypeError("SQLite connection required for SQL console")  # noqa: EM101, TRY003
 
     c.isolation_level = None
     try:

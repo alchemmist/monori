@@ -5,9 +5,8 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable, Iterator
 from contextlib import closing
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import psycopg
 from fastapi import HTTPException
@@ -17,9 +16,15 @@ from pglast.stream import RawStream
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Callable, Iterator
     from typing import Protocol
 
-    from monori.server.app.routers.admin_sql import SqlCell, SqlDryResponse, SqlResponse, SqliteValue
+    from monori.server.app.routers.admin_sql import (
+        SqlCell,
+        SqlDryResponse,
+        SqliteValue,
+        SqlResponse,
+    )
 
     class _Body(Protocol):
         sql: str
@@ -123,10 +128,9 @@ TYPES = {
 def nodes(x: object) -> Iterator[dict[str, object]]:
     """Yield PostgreSQL AST nodes from the parser's dictionary representation."""
     if isinstance(x, dict):
-        node = cast("dict[str, object]", x)
-        if "@" in node:
-            yield node
-        for value in node.values():
+        if "@" in x:
+            yield x
+        for value in x.values():
             yield from nodes(value)
     elif isinstance(x, (tuple, list)):
         for value in x:
@@ -138,7 +142,11 @@ def field_names(node: dict[str, object], field: str) -> list[str]:
     values = node.get(field)
     if not isinstance(values, (tuple, list)):
         return []
-    return [cast("str", value["sval"]) for value in values if isinstance(value, dict)]
+    return [
+        value["sval"]
+        for value in values
+        if isinstance(value, dict) and isinstance(value.get("sval"), str)
+    ]
 
 
 def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:  # noqa: C901, PLR0912
@@ -147,18 +155,29 @@ def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:  # noqa: C901, 
     if len(parsed) != 1:
         raise ValueError("Expected exactly one statement")  # noqa: EM101, TRY003
     root = parsed[0].stmt
-    tree = cast("dict[str, object]", root())
-    kind = cast("str", tree["@"])
+    tree_value = root()
+    if not isinstance(tree_value, dict) or not isinstance(tree_value.get("@"), str):
+        raise TypeError("Invalid PostgreSQL syntax tree")  # noqa: EM101, TRY003
+    tree = tree_value
+    kind = tree["@"]
     all_nodes = list(nodes(tree))
-    ctes = {cast("str", n["ctename"]) for n in all_nodes if n["@"] == "CommonTableExpr"}
+    ctes = {
+        n["ctename"]
+        for n in all_nodes
+        if n.get("@") == "CommonTableExpr" and isinstance(n.get("ctename"), str)
+    }
     if kind not in {"CreateStmt", "SelectStmt", "UpdateStmt", "DeleteStmt", "InsertStmt"}:
         raise ValueError("Unsupported console statement")  # noqa: EM101, TRY003
     for n in all_nodes:
-        tag = cast("str", n["@"])
+        tag = n.get("@")
+        if not isinstance(tag, str):
+            raise TypeError("Invalid PostgreSQL syntax tree")  # noqa: EM101, TRY003
         if tag not in NODES or (tag.endswith("Stmt") and n is not tree and tag != "SelectStmt"):
             raise ValueError("Unsupported SQL operation")  # noqa: EM101, TRY003
         if tag == "RangeVar":
-            rel = cast("str", n["relname"])
+            rel = n.get("relname")
+            if not isinstance(rel, str):
+                raise ValueError("Invalid PostgreSQL syntax tree")  # noqa: EM101, TRY003
             schema = n.get("schemaname")
             creating = kind == "CreateStmt" and n is tree["relation"]
             if (
@@ -228,8 +247,8 @@ def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:  # noqa: C901, 
             raise ValueError("Unsupported ordering operator")  # noqa: EM101, TRY003
     if kind == "CreateStmt":
         root.relation.schemaname = "console_scratch"
-    raw_stream_factory = cast("Callable[[], Callable[[object], str]]", RawStream)
-    return kind != "SelectStmt", raw_stream_factory()(root)
+    normalized_sql: str = RawStream()(root)  # type: ignore[no-untyped-call]
+    return kind != "SelectStmt", normalized_sql
 
 
 def run(  # noqa: PLR0913, PLR0915
@@ -291,9 +310,10 @@ def run(  # noqa: PLR0913, PLR0915
             else:
                 cur = db.cursor(name="monori_result")
                 cur.execute(sql)
-                columns = [d.name for d in cur.description]
+                description = cur.description
+                columns = [d.name for d in description] if description is not None else []
                 values = cur.fetchmany(row_limit + 1)
-                rows = [[cell(v) for v in row] for row in values[: row_limit]]
+                rows = [[cell(v) for v in row] for row in values[:row_limit]]
                 truncated = len(values) > row_limit
                 count = len(rows)
                 cur.close()
