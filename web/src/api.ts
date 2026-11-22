@@ -246,7 +246,7 @@ export const api = {
         })
             .then(json(okResponseSchema))
             .then(() => undefined),
-    reconcileHistory(id: Id): Promise<ReconcileEvent[]> {
+    reconcileHistory(this: void, id: Id): Promise<ReconcileEvent[]> {
         return apiFetch(`/api/accounts/${id}/reconciles`).then(
             json(
                 z.array(
