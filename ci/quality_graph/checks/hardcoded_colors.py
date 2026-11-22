@@ -293,6 +293,9 @@ def result_value(
         "runAttempt": int(environment["GITHUB_RUN_ATTEMPT"]),
         "graphDigest": graph_digest,
     }
+    if environment.get("QG_FLOW_ID"):
+        provenance["flowId"] = environment["QG_FLOW_ID"]
+        provenance["operationId"] = environment["QG_OPERATION_ID"]
     if pull_request:
         provenance["pullRequest"] = pull_request
     return {

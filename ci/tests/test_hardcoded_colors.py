@@ -208,6 +208,8 @@ def test_native_result_contains_semantic_findings_and_annotations() -> None:
             "GITHUB_RUN_ID": "123",
             "GITHUB_RUN_ATTEMPT": "2",
             "QG_PULL_REQUEST": "7",
+            "QG_FLOW_ID": "review",
+            "QG_OPERATION_ID": "hardcoded-colors",
         },
         "b" * 64,
     )
@@ -264,6 +266,8 @@ def test_native_result_contains_semantic_findings_and_annotations() -> None:
             "runAttempt": 2,
             "graphDigest": "b" * 64,
             "pullRequest": 7,
+            "flowId": "review",
+            "operationId": "hardcoded-colors",
         },
     }
 
