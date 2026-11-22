@@ -16,7 +16,6 @@ now-cached session.
 
 import logging
 import secrets
-import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -28,6 +27,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonObject
 from monori.server.app import crypto
+from monori.server.app import db as dbmod
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
@@ -38,6 +38,15 @@ from monori.server.app.connectors.base import (
     SyncResult,
     SyncRow,
 )
+from monori.server.app.db_records import (
+    RowTypeError,
+    row_enum,
+    row_int,
+    row_optional_int,
+    row_optional_str,
+    row_str,
+)
+from monori.server.app.db_types import DatabaseRow
 from monori.server.app.deps import conn
 from monori.server.app.domain_types import ConnectionStatus, TransactionSource
 from monori.server.app.importer import CategoryDefinition, CategoryRule, build_rules
@@ -109,7 +118,7 @@ class LinkedAccount:
 class SyncContext:
     """Represent shared state for a connection sync."""
 
-    connection: sqlite3.Connection
+    connection: dbmod.DatabaseConnection
     row: ConnectionRow
     credentials: JsonObject
     session: JsonObject | None
@@ -174,22 +183,17 @@ class ConnectionResponse:
     updated_at: str = Field(serialization_alias="updatedAt", validation_alias="updatedAt")
 
 
-def _optional_blob(value: sqlite3.Row, key: str) -> bytes | memoryview | None:
+def _optional_blob(value: DatabaseRow, key: str) -> bytes | memoryview | None:
     raw = value[key]
-    return raw if isinstance(raw, (bytes, memoryview)) else None
+    if raw is None:
+        return None
+    if isinstance(raw, (bytes, memoryview)):
+        return raw
+    message = f"SQL column {key!r} must be a blob, got {type(raw).__name__}"
+    raise RowTypeError(message)
 
 
-def _optional_str(value: sqlite3.Row, key: str) -> str | None:
-    raw = value[key]
-    return raw if isinstance(raw, str) else None
-
-
-def _optional_int(value: sqlite3.Row, key: str) -> int | None:
-    raw = value[key]
-    return raw if isinstance(raw, int) else None
-
-
-def _load(c: sqlite3.Connection, cid: int, uid: int) -> ConnectionRow:
+def _load(c: dbmod.DatabaseConnection, cid: int, uid: int) -> ConnectionRow:
     row = c.execute(
         "SELECT * FROM bank_connections WHERE id=? AND user_id=?",
         (cid, uid),
@@ -197,17 +201,17 @@ def _load(c: sqlite3.Connection, cid: int, uid: int) -> ConnectionRow:
     if row is None:
         raise HTTPException(404, "unknown connection")
     return ConnectionRow(
-        id=int(row["id"]),
-        bank=str(row["bank"]),
-        kind=str(row["kind"]),
+        id=row_int(row, "id"),
+        bank=row_str(row, "bank"),
+        kind=row_str(row, "kind"),
         credentials_encrypted=_optional_blob(row, "credentials_encrypted"),
         session_encrypted=_optional_blob(row, "session_encrypted"),
-        last_sync=_optional_str(row, "last_sync"),
-        pending_account_id=_optional_int(row, "pending_account_id"),
-        status=ConnectionStatus(str(row["status"])),
-        last_error=_optional_str(row, "last_error"),
-        created_at=str(row["created_at"]),
-        updated_at=str(row["updated_at"]),
+        last_sync=row_optional_str(row, "last_sync"),
+        pending_account_id=row_optional_int(row, "pending_account_id"),
+        status=row_enum(row, "status", ConnectionStatus),
+        last_error=row_optional_str(row, "last_error"),
+        created_at=row_str(row, "created_at"),
+        updated_at=row_str(row, "updated_at"),
     )
 
 
@@ -225,9 +229,9 @@ def _serialize_connection(row: ConnectionRow) -> ConnectionResponse:
     )
 
 
-def _linked_accounts(c: sqlite3.Connection, cid: int, uid: int) -> list[LinkedAccount]:
+def _linked_accounts(c: dbmod.DatabaseConnection, cid: int, uid: int) -> list[LinkedAccount]:
     return [
-        LinkedAccount(int(r["id"]), str(r["name"]), _optional_str(r, "bank_ref"))
+        LinkedAccount(row_int(r, "id"), row_str(r, "name"), row_optional_str(r, "bank_ref"))
         for r in c.execute(
             "SELECT id, name, bank_ref FROM accounts"
             " WHERE connection_id=? AND user_id=? ORDER BY sort, id",
@@ -236,9 +240,9 @@ def _linked_accounts(c: sqlite3.Connection, cid: int, uid: int) -> list[LinkedAc
     ]
 
 
-def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[CategoryRule]]:
+def _load_user_rules(c: dbmod.DatabaseConnection, uid: int) -> dict[str, list[CategoryRule]]:
     groups = {
-        r["id"]: r["kind"]
+        row_int(r, "id"): row_str(r, "kind")
         for r in c.execute(
             "SELECT g.id, t.type AS kind FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
@@ -247,10 +251,10 @@ def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[Category
     }
     cats: list[CategoryDefinition] = [
         CategoryDefinition(
-            id=int(r["id"]),
-            name=str(r["name"]),
-            keywords=str(r["keywords"]) if r["keywords"] is not None else None,
-            group_id=int(r["group_id"]),
+            id=row_int(r, "id"),
+            name=row_str(r, "name"),
+            keywords=row_optional_str(r, "keywords"),
+            group_id=row_int(r, "group_id"),
         )
         for r in c.execute(
             "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
@@ -298,7 +302,7 @@ def _require_account_refs(row: ConnectionRow, accounts: list[LinkedAccount]) -> 
         raise HTTPException(400, f"these accounts need a bank account id before syncing: {unset}")
 
 
-def _mark_error(c: sqlite3.Connection, cid: int, message: str) -> None:
+def _mark_error(c: dbmod.DatabaseConnection, cid: int, message: str) -> None:
     c.execute(
         "UPDATE bank_connections SET status='error', last_error=?, pending_account_id=NULL,"
         " updated_at=? WHERE id=?",
@@ -307,7 +311,7 @@ def _mark_error(c: sqlite3.Connection, cid: int, message: str) -> None:
     c.commit()
 
 
-def _fail(c: sqlite3.Connection, cid: int, error: Exception) -> NoReturn:
+def _fail(c: dbmod.DatabaseConnection, cid: int, error: Exception) -> NoReturn:
     """
     Record a failed sync without leaking raw connector details.
 
@@ -335,7 +339,7 @@ def _match_tail(bound: Mapping[str, set[int]], digits: str) -> str | None:
 
 
 def _route_rows(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     uid: int,
     default_account_id: int,
     rows: list[SyncRow],
@@ -350,9 +354,9 @@ def _route_rows(
     """
     bound: dict[str, set[int]] = {}
     for r in c.execute("SELECT id, card_tails FROM accounts WHERE user_id=? ORDER BY id", (uid,)):
-        for t in str(r["card_tails"] or "").split(","):
+        for t in (row_optional_str(r, "card_tails") or "").split(","):
             if t:
-                bound.setdefault(t, set()).add(int(r["id"]))
+                bound.setdefault(t, set()).add(row_int(r, "id"))
     routed: dict[int, list[SyncRow]] = {}
     unmapped: dict[str, int] = {}
     seen_tails = set()
@@ -376,7 +380,7 @@ def _route_rows(
 
 
 def _finish_account(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     row: ConnectionRow,
     account_id: int,
     result: SyncResult,
@@ -435,7 +439,7 @@ def _finish_account(
     return summaries, unmapped
 
 
-def _mark_connected(c: sqlite3.Connection, cid: int) -> None:
+def _mark_connected(c: dbmod.DatabaseConnection, cid: int) -> None:
     c.execute(
         "UPDATE bank_connections SET status='connected', last_sync=?, last_error=NULL,"
         " pending_account_id=NULL, updated_at=? WHERE id=?",
@@ -462,7 +466,7 @@ def _aggregate(
 
 
 def _account_since(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     cid: int,
     account_id: int,
     last_sync: str | None,
