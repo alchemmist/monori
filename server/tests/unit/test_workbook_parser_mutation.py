@@ -514,7 +514,7 @@ def test_year_summaries_read_localized_labels_and_preserve_zero_seeds() -> None:
     ws.cell(2, 7, 123.45)
     ws.cell(6, 7, "Доступный остаток")
     ws.cell(5, 7, 67.89)
-    ws.cell(1, 11, 99)  # An unlabeled number is not a carried balance.
+    ws.cell(1, 11, 99)
     layout = _find_layout(ws)
     assert layout is not None
 

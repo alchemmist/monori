@@ -69,7 +69,6 @@ type RecordValue = (
 def _sql_row(values: dict[str, Cell]) -> sqlite3.Row:
     with closing(sqlite3.connect(":memory:")) as connection:
         connection.row_factory = sqlite3.Row
-        # Column names are fixed test data, not external SQL input.
         query = "SELECT " + ", ".join(f'? AS "{key}"' for key in values)
         row = connection.execute(query, tuple(values.values())).fetchone()
         assert isinstance(row, sqlite3.Row)

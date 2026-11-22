@@ -77,7 +77,6 @@ def test_transaction_batch_preserves_row_order_and_groups_ordered_splits() -> No
             " NULL, 7, NULL, '', 'manual', 0)",
             ((tx_id,) for tx_id in (11, 22, 33, 44)),
         )
-        # Insert out of display order; equal sort values must use the split id.
         connection.executemany(
             "INSERT INTO splits VALUES (?, ?, ?, ?, ?, ?)",
             [

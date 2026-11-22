@@ -220,8 +220,6 @@ def test_link_locks_the_ledger_before_reading_either_leg(
         _database: str | None,
         _trigger: str | None,
     ) -> int:
-        # SQLite authorizes reads before executing them: attempt a concurrent
-        # change at that boundary, rather than asserting which SQL was emitted.
         if action == sqlite3.SQLITE_READ and table == "transactions" and not attempted:
             attempted.append("write succeeded")
             try:
@@ -244,7 +242,6 @@ def test_link_locks_the_ledger_before_reading_either_leg(
 def test_link_translates_unique_constraint_failure(ledger: sqlite3.Connection) -> None:
     pair = add_pair(ledger)
     transfer_id = service.link(ledger, 1, pair)
-    # Even a stale leg pointer must not bypass the entity's uniqueness constraint.
     ledger.execute("UPDATE transactions SET transfer_id=NULL")
     with pytest.raises(service.LinkError, match=r"^already part of a transfer$") as error:
         service.link(ledger, 1, pair)
