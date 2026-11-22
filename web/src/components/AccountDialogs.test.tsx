@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
+import { renderUI, resetStore, screen, seed, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 import { AccountDeleteDialog, AccountEditTab, AccountReconcileDialog } from "./AccountDialogs.jsx";
 
@@ -96,7 +96,8 @@ describe("account dialogs", () => {
         expect(close).toHaveBeenCalled();
     });
 
-    it("displays the most recent receipt and a link only for an actual adjustment", async () => {
+    it.each(["", "/demo"])("displays receipts and adjustment links under %s", async (prefix) => {
+        setPath(`${prefix}/accounts`);
         seed({ accounts: [account] });
         const event = {
             id: 2,
@@ -119,8 +120,9 @@ describe("account dialogs", () => {
         expect(screen.getAllByRole("listitem")).toHaveLength(2);
         expect(screen.getByRole("link", { name: "Adjustment #42" })).toHaveAttribute(
             "href",
-            "/transactions?transactionId=42",
+            `${prefix}/transactions?transactionId=42`,
         );
+        setPath("/");
     });
 
     it("updates an existing account and reports a failed save", async () => {

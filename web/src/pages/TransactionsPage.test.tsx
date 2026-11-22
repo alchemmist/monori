@@ -41,6 +41,24 @@ describe("TransactionsPage", () => {
         vi.clearAllMocks();
     });
 
+    it("opens only the transaction referenced by the adjustment link", () => {
+        window.history.pushState({}, "", "/transactions?transactionId=2");
+        try {
+            seed({
+                accounts,
+                transactions: [
+                    tx(1, { description: "Other entry" }),
+                    tx(2, { description: "Linked entry" }),
+                ],
+            });
+            renderUI(<TransactionsPage />);
+            expect(screen.getByText("Linked entry")).toBeInTheDocument();
+            expect(screen.queryByText("Other entry")).not.toBeInTheDocument();
+        } finally {
+            window.history.replaceState({}, "", "/");
+        }
+    });
+
     it("renders transactions, source tags, totals and progressive loading", () => {
         seed({
             accounts,
