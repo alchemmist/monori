@@ -1,17 +1,31 @@
 # Copyright (c) 2026
 """A scoped financial-data SQL console, not a PostgreSQL cluster administrator."""
 
+from __future__ import annotations
+
 import os
 import time
 from collections.abc import Callable, Iterator
 from contextlib import closing
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import psycopg
 from fastapi import HTTPException
 from pglast import parse_sql
 from pglast.parser import ParseError
 from pglast.stream import RawStream
+
+if TYPE_CHECKING:
+    import sqlite3
+    from typing import Protocol
+
+    from monori.server.app.routers.admin_sql import SqlCell, SqlDryResponse, SqlResponse, SqliteValue
+
+    class _Body(Protocol):
+        sql: str
+        dry_run: bool
+        confirm_write: bool
+
 
 TABLES = {
     "accounts",
@@ -218,14 +232,24 @@ def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:  # noqa: C901, 
     return kind != "SelectStmt", raw_stream_factory()(root)
 
 
-def run(body, uid):
-    from monori.server.app.deps import conn
-    from monori.server.app.routers import admin_sql as api
-
+def run(  # noqa: PLR0913, PLR0915
+    body: _Body,
+    uid: int,
+    *,
+    statement_max_chars: int,
+    query_timeout_s: float,
+    row_limit: int,
+    cell: Callable[[SqliteValue], SqlCell],
+    audit: Callable[[sqlite3.Connection, int, str, str], None],
+    conn: Callable[[], sqlite3.Connection],
+    response: Callable[..., SqlResponse],
+    dry_response: Callable[..., SqlDryResponse],
+) -> SqlResponse | SqlDryResponse:
+    """Run a console statement and record its audit outcome."""
     statement = body.sql.strip()
     started = time.monotonic()
     event = "admin_sql_failed"
-    if not statement or len(statement) > api.STATEMENT_MAX_CHARS:
+    if not statement or len(statement) > statement_max_chars:
         raise HTTPException(400, "Invalid SQL length")
     url = os.getenv("MONORI_CONSOLE_DATABASE_URL")
     if not url:
@@ -235,7 +259,7 @@ def run(body, uid):
             db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
             db.execute(
                 "SELECT set_config('statement_timeout',%s,true)",
-                (str(max(1, int(api.QUERY_TIMEOUT_S * 1000))),),
+                (str(max(1, int(query_timeout_s * 1000))),),
             )
             db.execute("SET LOCAL lock_timeout='2s'")
             scratch = {
@@ -251,12 +275,14 @@ def run(body, uid):
                 db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
                 db.execute(
                     "SELECT set_config('statement_timeout',%s,true)",
-                    (str(max(1, int(api.QUERY_TIMEOUT_S * 1000))),),
+                    (str(max(1, int(query_timeout_s * 1000))),),
                 )
             if write:
                 db.execute("SELECT pg_advisory_xact_lock(1297043023)")
                 if "returning" in sql.lower():
-                    raise ValueError("Use a separate SELECT to view updated rows")
+                    raise ValueError(  # noqa: TRY003, TRY301
+                        "Use a separate SELECT to view updated rows"  # noqa: EM101
+                    )
                 cur = db.execute(sql)
                 count = max(0, cur.rowcount)
                 columns = []
@@ -266,22 +292,22 @@ def run(body, uid):
                 cur = db.cursor(name="monori_result")
                 cur.execute(sql)
                 columns = [d.name for d in cur.description]
-                values = cur.fetchmany(api.ROW_LIMIT + 1)
-                rows = [[api.cell(v) for v in row] for row in values[: api.ROW_LIMIT]]
-                truncated = len(values) > api.ROW_LIMIT
+                values = cur.fetchmany(row_limit + 1)
+                rows = [[cell(v) for v in row] for row in values[: row_limit]]
+                truncated = len(values) > row_limit
                 count = len(rows)
                 cur.close()
-            args = dict(
-                columns=columns,
-                rows=rows,
-                truncated=truncated,
-                row_count=count,
-                elapsed_ms=round((time.monotonic() - started) * 1000, 1),
-            )
+            args = {
+                "columns": columns,
+                "rows": rows,
+                "truncated": truncated,
+                "row_count": count,
+                "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
+            }
             if body.dry_run:
                 db.rollback()
                 event = "admin_sql_dry_run"
-                return api.SqlDryResponse(kind="dry", would_write=write, **args)
+                return dry_response(kind="dry", would_write=write, **args)
             if write and not body.confirm_write:
                 db.rollback()
                 event = "admin_sql_rejected"
@@ -290,11 +316,11 @@ def run(body, uid):
                 )
             db.commit()
             event = "admin_sql"
-            return api.SqlResponse(kind="write" if write else "read", **args)
+            return response(kind="write" if write else "read", **args)
     except psycopg.errors.QueryCanceled as exc:
         raise HTTPException(400, "interrupted: statement timeout") from exc
     except (ValueError, ParseError, psycopg.Error) as exc:
         raise HTTPException(400, str(exc).splitlines()[0]) from exc
     finally:
-        with closing(conn()) as audit:
-            api._audit(audit, uid, event, statement)
+        with closing(conn()) as audit_connection:
+            audit(audit_connection, uid, event, statement)

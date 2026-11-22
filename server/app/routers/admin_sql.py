@@ -24,6 +24,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from monori.server.app.admin import admin_user
 from monori.server.app.auth import AuthenticatedUser
 from monori.server.app.deps import conn
+from monori.server.app.pg_console import run as run_pg_console
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -131,9 +132,18 @@ def run_sql(
     count, and nothing is ever committed.
     """
     if os.environ.get("MONORI_DATABASE_URL"):
-        from monori.server.app.pg_console import run
-
-        return run(body, admin.id)
+        return run_pg_console(
+            body,
+            admin.id,
+            statement_max_chars=STATEMENT_MAX_CHARS,
+            query_timeout_s=QUERY_TIMEOUT_S,
+            row_limit=ROW_LIMIT,
+            cell=cell,
+            audit=_audit,
+            conn=conn,
+            response=SqlResponse,
+            dry_response=SqlDryResponse,
+        )
     uid = admin.id
     sql = body.sql.strip()
     if not sql:
