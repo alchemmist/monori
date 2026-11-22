@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     from psycopg.rows import RowMaker
 
+
 IDENTITIES = {
     "accounts",
     "activity_events",
@@ -98,6 +99,19 @@ class Cursor:
         self.conn = conn
         self.inner: PsycopgCursor[Record] = conn.raw.cursor()
         self.lastrowid: int | None = None
+
+    @property
+    def rowcount(self) -> int:
+        """Return the number of rows affected by the current statement."""
+        return self.inner.rowcount
+
+    def fetchone(self) -> Record | None:
+        """Fetch one result row when present."""
+        return self.inner.fetchone()
+
+    def fetchall(self) -> list[Record]:
+        """Fetch all remaining result rows."""
+        return self.inner.fetchall()
 
     def __iter__(self) -> Iterator[Record]:
         """Iterate over result rows."""

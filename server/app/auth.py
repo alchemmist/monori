@@ -1,7 +1,7 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-import sqlite3
+
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -9,6 +9,7 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
+from monori.server.app.db_types import DatabaseRow
 from monori.server.app.deps import UserResponse, conn
 from monori.server.app.security import decode_access_token
 
@@ -38,7 +39,7 @@ class AuthenticatedUser:
         )
 
 
-def _user_from_row(row: sqlite3.Row) -> AuthenticatedUser:
+def _user_from_row(row: DatabaseRow) -> AuthenticatedUser:
     last_login = row["last_login"]
     default_account_id = row["default_account_id"]
     return AuthenticatedUser(

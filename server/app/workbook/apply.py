@@ -6,9 +6,9 @@ database for one user. The caller owns the connection and the commit.
 """
 
 import datetime as dt
-import sqlite3
 from collections.abc import Iterable, Mapping
 
+from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import ImportRow
 from monori.server.app.ingest import commit_rows, dedup_text, historical_day_counts
@@ -29,7 +29,7 @@ def _now() -> str:
 
 
 def _upsert_groups(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     groups: Iterable[WorkbookGroup],
 ) -> tuple[dict[str, int], int]:
@@ -58,7 +58,7 @@ def _upsert_groups(
 
 
 def _upsert_categories(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     categories: Iterable[WorkbookCategory],
     group_ids: Mapping[str, int],
@@ -105,7 +105,7 @@ def _upsert_categories(
     return ids, created
 
 
-def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, list[int]]:
+def _category_index(c: DatabaseConnection, uid: int) -> dict[str, list[int]]:
     """
     Every category the user owns, keyed by a normalized name, so a workbook cell.
 
@@ -147,7 +147,7 @@ def _drop_already_present(
 
 
 def _import_transactions(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     transactions: Iterable[WorkbookTransaction],
     mapping: Mapping[str, int],
@@ -222,7 +222,7 @@ def _import_transactions(
 
 
 def _import_budgets(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     budgets: Iterable[WorkbookBudget],
     category_ids: Mapping[tuple[str, str], int],
     *,
@@ -261,7 +261,7 @@ def _import_budgets(
     return written, skipped
 
 
-def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: Iterable[WorkbookBudget]) -> int:
+def budget_conflicts(c: DatabaseConnection, uid: int, budgets: Iterable[WorkbookBudget]) -> int:
     """
     Count workbook budget cells that collide with the user's existing budgets.
 
@@ -281,7 +281,7 @@ def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: Iterable[Workbook
 
 
 def apply_workbook(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     parsed: ParsedWorkbook,
     mapping: Mapping[str, int],

@@ -10,10 +10,10 @@ create duplicates.
 """
 
 import json
-import sqlite3
 from collections.abc import Iterable, Mapping
 
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
     CategoryDefinition,
@@ -29,7 +29,7 @@ INSERT_SQL = """INSERT INTO transactions
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
 
-def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
+def load_rules(c: DatabaseConnection) -> dict[str, list[CategoryRule]]:
     """Build the IN/OUT categorization rules from the current categories."""
     groups = {
         r["id"]: r["kind"]
@@ -50,7 +50,7 @@ def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
     return build_rules(cats, groups)
 
 
-def existing_hash_counts(c: sqlite3.Connection, account_id: int) -> dict[str, int]:
+def existing_hash_counts(c: DatabaseConnection, account_id: int) -> dict[str, int]:
     """
     Hash → count of matching transactions on ``account_id``. Dedup is scoped.
 
@@ -79,7 +79,7 @@ def dedup_text(description: str) -> str:
 
 
 def historical_day_counts(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     sources: tuple[TransactionSource, ...] = (
         TransactionSource.WORKBOOK,
@@ -140,7 +140,7 @@ def drop_already_present(
 
 
 def commit_rows(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     account_id: int,
     rows: Iterable[SyncRow],
     source: TransactionSource,

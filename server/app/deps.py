@@ -2,7 +2,6 @@
 """Provide backend functionality."""
 
 import json
-import sqlite3
 from collections.abc import Iterable
 from itertools import batched
 
@@ -20,6 +19,7 @@ from monori.server.app.db_records import (
     TransactionRecord,
     UserRecord,
 )
+from monori.server.app.db_types import DatabaseConnection, DatabaseCursor, DatabaseRow
 from monori.server.app.domain_types import (
     AccountType,
     CategoryGroupKind,
@@ -275,8 +275,8 @@ def serialize_tx(
 
 
 def serialize_transactions(
-    cur: sqlite3.Cursor,
-    rows: Iterable[sqlite3.Row],
+    cur: DatabaseCursor,
+    rows: Iterable[DatabaseRow],
 ) -> list[TransactionResponse]:
     """Handle serialize transactions."""
     transactions = [TransactionRecord.from_row(row) for row in rows]
@@ -344,7 +344,7 @@ TX_COLUMNS = (
 
 
 def _snapshot_transactions(
-    cur: sqlite3.Cursor,
+    cur: DatabaseCursor,
     uid: tuple[int],
     tx_limit: int | None,
 ) -> list[TransactionResponse]:
@@ -359,7 +359,7 @@ def _snapshot_transactions(
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
+def snapshot(c: DatabaseConnection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
     """Handle snapshot."""
     cur = c.cursor()
     uid = (user_id,)

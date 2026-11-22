@@ -18,6 +18,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.db import begin_write
 from monori.server.app.db_records import TransactionRecord, TransferRecord, TransferSplitRecord
+from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.transfer_match import (
     AUTO_DAYS,
     SUGGEST_DAYS,
@@ -72,7 +73,7 @@ def serialize_transfer(record: TransferRecord) -> TransferResponse:
     )
 
 
-def list_transfers(c: sqlite3.Connection, uid: int) -> list[TransferResponse]:
+def list_transfers(c: DatabaseConnection, uid: int) -> list[TransferResponse]:
     """Handle list transfers."""
     return [
         serialize_transfer(TransferRecord.from_row(r))
@@ -84,7 +85,7 @@ def list_transfers(c: sqlite3.Connection, uid: int) -> list[TransferResponse]:
     ]
 
 
-def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> TransactionRecord | None:
+def owned_tx(c: DatabaseConnection, uid: int, tx_id: int) -> TransactionRecord | None:
     """Handle owned tx."""
     row = c.execute(
         "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
@@ -109,7 +110,7 @@ class LinkRequest:
 
 
 def link(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     request: LinkRequest,
 ) -> str:
@@ -175,7 +176,7 @@ def link(
     return transfer_id
 
 
-def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
+def split(c: DatabaseConnection, uid: int, transfer_id: str) -> bool:
     """
     Undo a merge: both transactions stay, get their categories back and stop.
 
@@ -201,7 +202,7 @@ def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
     return True
 
 
-def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
+def detach_leg(c: DatabaseConnection, uid: int, tx_id: int) -> bool:
     """
     Split whatever transfer this transaction belongs to, so it can be deleted on.
 
@@ -218,7 +219,7 @@ def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
     return split(c, uid, row["id"])
 
 
-def reject(c: sqlite3.Connection, uid: int, out_tx_id: int, in_tx_id: int) -> None:
+def reject(c: DatabaseConnection, uid: int, out_tx_id: int, in_tx_id: int) -> None:
     """Remember that this pair is not a transfer, so detection stops proposing it."""
     if owned_tx(c, uid, out_tx_id) is None or owned_tx(c, uid, in_tx_id) is None:
         msg = "unknown transaction"
@@ -229,7 +230,7 @@ def reject(c: sqlite3.Connection, uid: int, out_tx_id: int, in_tx_id: int) -> No
     )
 
 
-def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
+def rejections(c: DatabaseConnection, uid: int) -> set[tuple[int, int]]:
     """Handle rejections."""
     return {
         (r["out_tx_id"], r["in_tx_id"])
@@ -243,7 +244,7 @@ def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
 
 
 def candidates(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     max_days: int = SUGGEST_DAYS,
 ) -> list[TransferCandidate]:
@@ -263,7 +264,7 @@ def candidates(
 
 
 def detect(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     auto_days: int = AUTO_DAYS,
     max_days: int = SUGGEST_DAYS,

@@ -1,11 +1,11 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-import sqlite3
+
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import cast
 
+from monori.server.app.db_types import DatabaseRow
 from monori.server.app.domain_types import (
     AccountType,
     CategoryGroupKind,
@@ -23,58 +23,61 @@ class RowTypeError(TypeError):
     """Raised when a SQLite column has an unexpected Python type."""
 
 
-type SqliteCell = int | float | str | bytes | None
-
-
-def _row_value(row: sqlite3.Row, key: str) -> SqliteCell:
+def _row_value(row: DatabaseRow, key: str) -> object:
     try:
-        return cast("SqliteCell", row[key])
+        return row[key]
     except IndexError as error:
         message = f"SQL row is missing required column {key!r}"
         raise RowValueError(message) from error
 
 
-def row_int(row: sqlite3.Row, key: str) -> int:
-    """Read a required SQLite integer without leaking ``Any`` into records."""
-    value = _row_value(row, key)
+def db_int(value: object, key: str = "value") -> int:
+    """Validate a required integer database value."""
     if type(value) is not int:
         message = f"SQL column {key!r} must be an int, got {type(value).__name__}"
         raise RowTypeError(message)
     return value
 
 
-def row_str(row: sqlite3.Row, key: str) -> str:
-    """Read a required SQLite text column without leaking ``Any`` into records."""
-    value = _row_value(row, key)
+def db_str(value: object, key: str = "value") -> str:
+    """Validate a required text database value."""
     if not isinstance(value, str):
         message = f"SQL column {key!r} must be a str, got {type(value).__name__}"
         raise RowTypeError(message)
     return value
 
 
-def row_optional_int(row: sqlite3.Row, key: str) -> int | None:
+def db_optional_int(value: object, key: str = "value") -> int | None:
+    """Validate a nullable integer database value."""
+    return None if value is None else db_int(value, key)
+
+
+def db_optional_str(value: object, key: str = "value") -> str | None:
+    """Validate a nullable text database value."""
+    return None if value is None else db_str(value, key)
+
+
+def row_int(row: DatabaseRow, key: str) -> int:
+    """Read a required SQLite integer without leaking ``Any`` into records."""
+    return db_int(_row_value(row, key), key)
+
+
+def row_str(row: DatabaseRow, key: str) -> str:
+    """Read a required SQLite text column without leaking ``Any`` into records."""
+    return db_str(_row_value(row, key), key)
+
+
+def row_optional_int(row: DatabaseRow, key: str) -> int | None:
     """Read a nullable SQLite integer column."""
-    value = _row_value(row, key)
-    if value is None:
-        return None
-    if type(value) is not int:
-        message = f"SQL column {key!r} must be an int or null, got {type(value).__name__}"
-        raise RowTypeError(message)
-    return value
+    return db_optional_int(_row_value(row, key), key)
 
 
-def row_optional_str(row: sqlite3.Row, key: str) -> str | None:
+def row_optional_str(row: DatabaseRow, key: str) -> str | None:
     """Read a nullable SQLite text column."""
-    value = _row_value(row, key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        message = f"SQL column {key!r} must be a str or null, got {type(value).__name__}"
-        raise RowTypeError(message)
-    return value
+    return db_optional_str(_row_value(row, key), key)
 
 
-def row_bool(row: sqlite3.Row, key: str) -> bool:
+def row_bool(row: DatabaseRow, key: str) -> bool:
     """Read SQLite's integer-backed boolean representation."""
     value = row_int(row, key)
     if value not in (0, 1):
@@ -84,7 +87,7 @@ def row_bool(row: sqlite3.Row, key: str) -> bool:
 
 
 def row_enum[EnumValue: StrEnum](
-    row: sqlite3.Row, key: str, enum_type: type[EnumValue]
+    row: DatabaseRow, key: str, enum_type: type[EnumValue]
 ) -> EnumValue:
     """Read a closed string value and make unexpected persisted data explicit."""
     try:
@@ -104,7 +107,7 @@ class GroupRecord:
     kind: CategoryGroupKind
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "GroupRecord":
+    def from_row(cls, row: DatabaseRow) -> "GroupRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -129,7 +132,7 @@ class CategoryRecord:
     goal_target_date: str | None = None
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "CategoryRecord":
+    def from_row(cls, row: DatabaseRow) -> "CategoryRecord":
         """Handle from row."""
         keys = row.keys()
         return cls(
@@ -162,7 +165,7 @@ class CategoryOwnershipRecord:
     is_goal: bool
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "CategoryOwnershipRecord":
+    def from_row(cls, row: DatabaseRow) -> "CategoryOwnershipRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -181,7 +184,7 @@ class GoalGroupRecord:
     is_goal: bool
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "GoalGroupRecord":
+    def from_row(cls, row: DatabaseRow) -> "GoalGroupRecord":
         """Handle from row."""
         return cls(id=row_int(row, "id"), is_goal=row_bool(row, "is_goal"))
 
@@ -194,7 +197,7 @@ class CategorySignRecord:
     transaction_sign: int
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "CategorySignRecord":
+    def from_row(cls, row: DatabaseRow) -> "CategorySignRecord":
         """Handle from row."""
         return cls(id=row_int(row, "id"), transaction_sign=row_int(row, "transaction_sign"))
 
@@ -219,7 +222,7 @@ class AccountRecord:
     card_tails: str
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "AccountRecord":
+    def from_row(cls, row: DatabaseRow) -> "AccountRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -250,7 +253,7 @@ class SplitRecord:
     comment: str
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "SplitRecord":
+    def from_row(cls, row: DatabaseRow) -> "SplitRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -279,7 +282,7 @@ class TransactionRecord:
     hidden: bool
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "TransactionRecord":
+    def from_row(cls, row: DatabaseRow) -> "TransactionRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -309,7 +312,7 @@ class UserRecord:
     default_account_id: int | None
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "UserRecord":
+    def from_row(cls, row: DatabaseRow) -> "UserRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -336,7 +339,7 @@ class ConnectionRecord:
     updated_at: str
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "ConnectionRecord":
+    def from_row(cls, row: DatabaseRow) -> "ConnectionRecord":
         """Handle from row."""
         return cls(
             id=row_int(row, "id"),
@@ -361,7 +364,7 @@ class BudgetRecord:
     amount: int
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "BudgetRecord":
+    def from_row(cls, row: DatabaseRow) -> "BudgetRecord":
         """Handle from row."""
         return cls(
             category_id=row_int(row, "category_id"),
@@ -383,7 +386,7 @@ class TransferRecord:
     created_at: str
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "TransferRecord":
+    def from_row(cls, row: DatabaseRow) -> "TransferRecord":
         """Handle from row."""
         return cls(
             id=row_str(row, "id"),
@@ -405,7 +408,7 @@ class TransferSplitRecord:
     in_category_id: int | None
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "TransferSplitRecord":
+    def from_row(cls, row: DatabaseRow) -> "TransferSplitRecord":
         """Handle from row."""
         return cls(
             out_tx_id=row_int(row, "out_tx_id"),
