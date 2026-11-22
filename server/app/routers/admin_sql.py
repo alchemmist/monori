@@ -23,8 +23,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.admin import admin_user
 from monori.server.app.auth import AuthenticatedUser
-from monori.server.app.deps import conn
 from monori.server.app.db import DatabaseConnection
+from monori.server.app.deps import conn
 from monori.server.app.pg_console import run as run_pg_console
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -114,7 +114,7 @@ class SqlDryResponse(SqlResponse):
 
 
 @router.post("/sql")
-def run_sql(  # noqa: PLR0915
+def run_sql(
     body: SqlBody,
     admin: Annotated[AuthenticatedUser, Depends(admin_user)],
 ) -> SqlResponse | SqlDryResponse:
