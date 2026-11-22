@@ -466,7 +466,7 @@ def bulk_transactions(
 
             for tx_id in body.ids:
                 row = c.execute(
-                    "SELECT t.amount, EXISTS(SELECT 1 FROM splits s"
+                    "SELECT t.amount, (SELECT COUNT(*) FROM splits s"
                     " WHERE s.transaction_id=t.id) AS is_split"
                     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
                     " WHERE t.id=? AND a.user_id=?",
