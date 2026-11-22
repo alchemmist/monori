@@ -1,3 +1,5 @@
+import { act } from "@testing-library/react";
+import type { ReconcileEvent } from "../types.js";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderUI, resetStore, screen, seed, setPath, waitFor } from "../test/render.jsx";
@@ -96,6 +98,48 @@ describe("account dialogs", () => {
         expect(close).toHaveBeenCalled();
     });
 
+    it.each(["success", "failure"])(
+        "ignores a late %s after switching accounts",
+        async (outcome) => {
+            let settle!: (rows: ReconcileEvent[]) => void;
+            let stale!: (error: Error) => void;
+            const first = new Promise<ReconcileEvent[]>((resolve, reject) => {
+                settle = resolve;
+                stale = reject;
+            });
+            let offline!: (error: Error) => void;
+            const second = new Promise<ReconcileEvent[]>((_resolve, reject) => {
+                offline = reject;
+            });
+            vi.spyOn(useStore.getState(), "reconcileHistory")
+                .mockResolvedValueOnce([])
+                .mockReturnValueOnce(first)
+                .mockReturnValueOnce(second);
+            const dialog = (id: number) => (
+                <AccountReconcileDialog
+                    account={{ ...account, id }}
+                    balance={0}
+                    onClose={vi.fn()}
+                />
+            );
+            const view = renderUI(dialog(1));
+            expect(await screen.findByText("No reconciliations recorded.")).toBeInTheDocument();
+            view.rerender(dialog(2));
+            expect(screen.getByText("Loading reconciliation history…")).toBeInTheDocument();
+            view.rerender(dialog(3));
+            await act(async () => {
+                if (outcome === "success") settle([]);
+                else stale(new Error("stale"));
+                await Promise.resolve();
+            });
+            expect(screen.getByText("Loading reconciliation history…")).toBeInTheDocument();
+            offline(new Error("offline"));
+            expect(
+                await screen.findByText("Could not load reconciliation history."),
+            ).toBeInTheDocument();
+        },
+    );
+
     it.each(["", "/demo"])("displays receipts and adjustment links under %s", async (prefix) => {
         setPath(`${prefix}/accounts`);
         seed({ accounts: [account] });
@@ -118,6 +162,7 @@ describe("account dialogs", () => {
         );
         await user.click(await screen.findByText(/Last reconciled:/));
         expect(screen.getAllByRole("listitem")).toHaveLength(2);
+        expect(screen.getAllByRole("link")).toHaveLength(1);
         expect(screen.getByRole("link", { name: "Adjustment #42" })).toHaveAttribute(
             "href",
             `${prefix}/transactions?transactionId=42`,

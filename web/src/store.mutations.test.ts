@@ -542,6 +542,12 @@ describe("store remote mutations", () => {
         expect(refreshCount()).toBe(0);
     });
 
+    it("loads remote reconciliation receipts for the selected account", async () => {
+        const history = vi.spyOn(api, "reconcileHistory").mockResolvedValue([]);
+        expect(await useStore.getState().reconcileHistory(42)).toEqual([]);
+        expect(history).toHaveBeenCalledExactlyOnceWith(42);
+    });
+
     it("reloads after a reconcile and returns the server delta", async () => {
         const reconcile = vi.spyOn(api, "reconcileAccount").mockResolvedValue({ delta: 5 });
         const result = await useStore.getState().reconcileAccount(1, 100);

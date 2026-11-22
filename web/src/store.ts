@@ -1181,12 +1181,7 @@ export const useStore = create<StoreState>((set, get) => ({
     async reconcileHistory(id) {
         if (!isDemo()) return api.reconcileHistory(id);
         const snapshot = requireSnapshot(get().snapshot);
-        return (snapshot.demoReconciles?.[id] ?? []).map((event) => ({
-            ...event,
-            adjustmentTxId: snapshot.transactions.some((t) => t.id === event.adjustmentTxId)
-                ? event.adjustmentTxId
-                : null,
-        }));
+        return snapshot.demoReconciles?.[id] ?? [];
     },
 
     async reconcileAccount(id, actualBalance) {

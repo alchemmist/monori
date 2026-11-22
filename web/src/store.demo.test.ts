@@ -219,6 +219,18 @@ describe("reconcileAccount in the demo", () => {
         expect(added!.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
     });
 
+    it("keeps the newest 50 receipts and preserves unrelated adjustment links", async () => {
+        const store = useStore.getState();
+        expect(await store.reconcileHistory(1)).toEqual([]);
+        await store.reconcileAccount(1, 200);
+        await store.reconcileAccount(1, 210);
+        await store.deleteTransaction(8);
+        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([9, null]);
+        for (let i = 0; i < 50; i++) await store.reconcileAccount(1, 160);
+        const rows = await store.reconcileHistory(1);
+        expect(rows.map((r) => r.id)).toEqual(Array.from({ length: 50 }, (_, i) => 52 - i));
+    });
+
     it("does not relink a deleted adjustment when a demo ID is reused", async () => {
         const store = useStore.getState();
         await store.reconcileAccount(1, 200);

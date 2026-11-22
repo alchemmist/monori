@@ -544,6 +544,7 @@ describe("api", () => {
     });
 
     it.each([
+        ["reconcileHistory", () => api.reconcileHistory(1)],
         ["authLogin", () => api.authLogin("a@b.c", "pw")],
         ["authMe", () => api.authMe("token")],
         ["workbookPreview", () => api.workbookPreview(new File(["x"], "book.xlsx"))],
