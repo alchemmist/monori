@@ -260,7 +260,8 @@ describe("account dialogs", () => {
             const initial = defer();
             const superseded = defer();
             const latest = defer();
-            vi.spyOn(useStore.getState(), "reconcileHistory")
+            const historySpy = vi
+                .spyOn(useStore.getState(), "reconcileHistory")
                 .mockReturnValueOnce(initial.promise)
                 .mockReturnValueOnce(superseded.promise)
                 .mockReturnValueOnce(latest.promise);
@@ -291,7 +292,9 @@ describe("account dialogs", () => {
             await act(async () => {
                 if (outcome === "success") superseded.resolve(rows("2026-03-05T00:00:00Z"));
                 else superseded.reject(new Error("stale"));
+                await Promise.resolve();
             });
+            expect(historySpy).toHaveBeenCalledTimes(3);
             expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(
                 stamp("2026-03-09T00:00:00Z"),
             );
