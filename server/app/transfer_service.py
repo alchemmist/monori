@@ -17,7 +17,14 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.db import begin_write
-from monori.server.app.db_records import TransactionRecord, TransferRecord, TransferSplitRecord
+from monori.server.app.db_records import (
+    TransactionRecord,
+    TransferRecord,
+    TransferSplitRecord,
+    db_int,
+    db_optional_str,
+    db_str,
+)
 from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.transfer_match import (
     AUTO_DAYS,
@@ -216,7 +223,7 @@ def detach_leg(c: DatabaseConnection, uid: int, tx_id: int) -> bool:
     ).fetchone()
     if row is None:
         return False
-    return split(c, uid, row["id"])
+    return split(c, uid, db_str(row["id"], "id"))
 
 
 def reject(c: DatabaseConnection, uid: int, out_tx_id: int, in_tx_id: int) -> None:
@@ -233,7 +240,7 @@ def reject(c: DatabaseConnection, uid: int, out_tx_id: int, in_tx_id: int) -> No
 def rejections(c: DatabaseConnection, uid: int) -> set[tuple[int, int]]:
     """Handle rejections."""
     return {
-        (r["out_tx_id"], r["in_tx_id"])
+        (db_int(r["out_tx_id"], "out_tx_id"), db_int(r["in_tx_id"], "in_tx_id"))
         for r in c.execute(
             "SELECT r.out_tx_id, r.in_tx_id FROM transfer_rejections r"
             " JOIN transactions t ON t.id = r.out_tx_id"
@@ -251,12 +258,12 @@ def candidates(
     """Handle candidates."""
     rows = [
         TransferMatchRow(
-            id=row["id"],
-            date=row["date"],
-            amount=row["amount"],
-            description=row["description"],
-            account_id=row["account_id"],
-            transfer_id=row["transfer_id"],
+            id=db_int(row["id"], "id"),
+            date=db_str(row["date"], "date"),
+            amount=db_int(row["amount"], "amount"),
+            description=db_str(row["description"], "description"),
+            account_id=db_int(row["account_id"], "account_id"),
+            transfer_id=db_optional_str(row["transfer_id"], "transfer_id"),
         )
         for row in c.execute(LINKABLE_COLUMNS, (uid,))
     ]

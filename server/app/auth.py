@@ -9,6 +9,7 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
+from monori.server.app.db_records import db_int, db_optional_int, db_optional_str, db_str
 from monori.server.app.db_types import DatabaseRow
 from monori.server.app.deps import UserResponse, conn
 from monori.server.app.security import decode_access_token
@@ -40,15 +41,13 @@ class AuthenticatedUser:
 
 
 def _user_from_row(row: DatabaseRow) -> AuthenticatedUser:
-    last_login = row["last_login"]
-    default_account_id = row["default_account_id"]
     return AuthenticatedUser(
-        id=int(row["id"]),
-        email=str(row["email"]),
-        created_at=str(row["created_at"]),
-        is_admin=bool(row["is_admin"]),
-        last_login=last_login if isinstance(last_login, str) else None,
-        default_account_id=default_account_id if isinstance(default_account_id, int) else None,
+        id=db_int(row["id"], "id"),
+        email=db_str(row["email"], "email"),
+        created_at=db_str(row["created_at"], "created_at"),
+        is_admin=bool(db_int(row["is_admin"], "is_admin")),
+        last_login=db_optional_str(row["last_login"], "last_login"),
+        default_account_id=db_optional_int(row["default_account_id"], "default_account_id"),
     )
 
 

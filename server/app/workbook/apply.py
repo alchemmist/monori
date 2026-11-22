@@ -8,6 +8,7 @@ database for one user. The caller owns the connection and the commit.
 import datetime as dt
 from collections.abc import Iterable, Mapping
 
+from monori.server.app.db_records import db_int, db_str
 from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import ImportRow
@@ -34,7 +35,7 @@ def _upsert_groups(
     groups: Iterable[WorkbookGroup],
 ) -> tuple[dict[str, int], int]:
     existing = {
-        str(r["name"]): int(r["id"])
+        db_str(r["name"], "name"): db_int(r["id"], "id")
         for r in c.execute("SELECT id, name FROM category_groups WHERE user_id=?", (uid,))
     }
     created = 0
@@ -64,7 +65,9 @@ def _upsert_categories(
     group_ids: Mapping[str, int],
 ) -> tuple[dict[tuple[str, str], int], int]:
     existing = {
-        (int(r["group_id"]), str(r["name"])): int(r["id"])
+        (db_int(r["group_id"], "group_id"), db_str(r["name"], "name")): db_int(
+            r["id"], "id"
+        )
         for r in c.execute(
             "SELECT c.id, c.group_id, c.name FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
@@ -72,7 +75,7 @@ def _upsert_categories(
         )
     }
     max_sort = {
-        int(r["group_id"]): int(r["s"])
+        db_int(r["group_id"], "group_id"): db_int(r["s"], "s")
         for r in c.execute(
             "SELECT c.group_id, MAX(c.sort) s FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?"
@@ -120,7 +123,7 @@ def _category_index(c: DatabaseConnection, uid: int) -> dict[str, list[int]]:
         " ORDER BY c.sort, c.id",
         (uid,),
     ):
-        index.setdefault(_norm(str(r["name"])), []).append(int(r["id"]))
+        index.setdefault(_norm(db_str(r["name"], "name")), []).append(db_int(r["id"], "id"))
     return index
 
 
@@ -269,7 +272,11 @@ def budget_conflicts(c: DatabaseConnection, uid: int, budgets: Iterable[Workbook
     overwrite/skip choice makes a difference.
     """
     existing = {
-        (r["name"], r["year"], r["month"])
+        (
+            db_str(r["name"], "name"),
+            db_int(r["year"], "year"),
+            db_int(r["month"], "month"),
+        )
         for r in c.execute(
             "SELECT cat.name AS name, b.year AS year, b.month AS month FROM budgets b"
             " JOIN categories cat ON cat.id = b.category_id"

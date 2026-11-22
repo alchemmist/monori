@@ -18,6 +18,7 @@ from monori.server.app.db_records import (
     SplitRecord,
     TransactionRecord,
     UserRecord,
+    db_int,
 )
 from monori.server.app.db_types import DatabaseConnection, DatabaseCursor, DatabaseRow
 from monori.server.app.domain_types import (
@@ -365,15 +366,18 @@ def snapshot(c: DatabaseConnection, user_id: int, tx_limit: int | None = None) -
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
 
-    transactions_total = (
-        len(transactions)
-        if tx_limit is None or len(transactions) < tx_limit
-        else cur.execute(
+    if tx_limit is None or len(transactions) < tx_limit:
+        transactions_total = len(transactions)
+    else:
+        count_row = cur.execute(
             "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
             " WHERE a.user_id=? AND t.hidden = 0",
             uid,
-        ).fetchone()[0]
-    )
+        ).fetchone()
+        if count_row is None:
+            msg = "transaction count query returned no row"
+            raise RuntimeError(msg)
+        transactions_total = db_int(count_row[0], "count")
     return SnapshotResponse(
         accounts=[
             serialize_account(AccountRecord.from_row(r))

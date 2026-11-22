@@ -13,6 +13,7 @@ import json
 from collections.abc import Iterable, Mapping
 
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.db_records import db_int, db_optional_str, db_str
 from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
@@ -32,7 +33,7 @@ INSERT_SQL = """INSERT INTO transactions
 def load_rules(c: DatabaseConnection) -> dict[str, list[CategoryRule]]:
     """Build the IN/OUT categorization rules from the current categories."""
     groups = {
-        r["id"]: r["kind"]
+        db_int(r["id"], "id"): db_str(r["kind"], "kind")
         for r in c.execute(
             "SELECT g.id, t.type AS kind FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id",
@@ -40,10 +41,10 @@ def load_rules(c: DatabaseConnection) -> dict[str, list[CategoryRule]]:
     }
     cats: list[CategoryDefinition] = [
         CategoryDefinition(
-            id=int(r["id"]),
-            name=str(r["name"]),
-            keywords=str(r["keywords"]) if r["keywords"] is not None else None,
-            group_id=int(r["group_id"]),
+            id=db_int(r["id"], "id"),
+            name=db_str(r["name"], "name"),
+            keywords=db_optional_str(r["keywords"], "keywords"),
+            group_id=db_int(r["group_id"], "group_id"),
         )
         for r in c.execute("SELECT id, name, keywords, group_id FROM categories ORDER BY sort")
     ]
@@ -58,7 +59,7 @@ def existing_hash_counts(c: DatabaseConnection, account_id: int) -> dict[str, in
     different accounts is not collapsed away.
     """
     return {
-        r["hash"]: r["n"]
+        db_str(r["hash"], "hash"): db_int(r["n"], "n")
         for r in c.execute(
             "SELECT hash, COUNT(*) n FROM transactions WHERE account_id=? GROUP BY hash",
             (account_id,),
@@ -109,8 +110,12 @@ def historical_day_counts(
         " GROUP BY day, t.amount, t.description",
         (uid, json.dumps(sources)),
     ):
-        key = (str(r["day"]), int(r["amount"]), dedup_text(str(r["description"])))
-        counts[key] = counts.get(key, 0) + int(r["n"])
+        key = (
+            db_str(r["day"], "day"),
+            db_int(r["amount"], "amount"),
+            dedup_text(db_str(r["description"], "description")),
+        )
+        counts[key] = counts.get(key, 0) + db_int(r["n"], "n")
     return counts
 
 

@@ -18,6 +18,7 @@ import threading
 from alembic import command
 from alembic.config import Config
 
+from monori.server.app.db_types import DatabaseConnection as DbApiConnection
 from monori.server.app.pg_runtime import Connection
 
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -166,9 +167,9 @@ def connect(db_path: str | os.PathLike[str] | None = None) -> DatabaseConnection
     return conn
 
 
-def begin_write(conn: DatabaseConnection) -> None:
-    """Acquire SQLite's write reservation before correlated reads and writes."""
-    if isinstance(conn, Connection):
-        conn.lock()
-    elif not conn.in_transaction:
+def begin_write(conn: DbApiConnection) -> None:
+    """Acquire the database write lock before correlated reads and writes."""
+    if isinstance(conn, sqlite3.Connection) and not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")
+    elif isinstance(conn, Connection):
+        conn.lock()
