@@ -111,6 +111,32 @@ describe("account dialogs", () => {
         expect(close).not.toHaveBeenCalled();
     });
 
+    it("tracks live balances except while editing, then resets the draft after saving", async () => {
+        seed({ accounts: [account] });
+        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([]);
+        const save = vi
+            .spyOn(useStore.getState(), "reconcileAccount")
+            .mockResolvedValue({ delta: 0 });
+        const tab = (balance: number) => (
+            <AccountReconcileTab account={account} balance={balance} onClose={vi.fn()} />
+        );
+        const { user, rerender } = renderUI(tab(10000));
+        const field = screen.getByLabelText<HTMLInputElement>("Actual bank balance");
+        rerender(tab(12000));
+        expect(Number(field.value)).toBe(120);
+        await user.clear(field);
+        await user.type(field, "99");
+        rerender(tab(13000));
+        expect(Number(field.value)).toBe(99);
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenCalledWith(1, 9900);
+        rerender(tab(9900));
+        rerender(tab(14000));
+        expect(Number(field.value)).toBe(140);
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenLastCalledWith(1, 14000);
+    });
+
     it.each(["success", "failure"])(
         "ignores a late %s after switching accounts",
         async (outcome) => {

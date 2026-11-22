@@ -364,7 +364,8 @@ export function AccountReconcileTab({
             current = false;
         };
     }, [account.id, reconcileHistory, historyVersion]);
-    const [actual, setActual] = useState(amountInput(balance));
+    const [draft, setActual] = useState<string | null>(null);
+    const actual = draft ?? amountInput(balance);
     const [busy, setBusy] = useState(false);
     const actualKop = parseRub(actual);
     const delta = actualKop == null ? null : actualKop - balance;
@@ -384,6 +385,7 @@ export function AccountReconcileTab({
                         : `Adjustment of ${money(res.delta)} posted`,
                 theme: "success",
             });
+            setActual(null);
             refreshHistory((version) => version + 1);
         } catch (e) {
             notify({ title: "Failed to reconcile", theme: "danger", content: String(e) });
