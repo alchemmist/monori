@@ -1,4 +1,5 @@
-"""Transfer Monori revision 0021 into an empty PostgreSQL database in one transaction.
+"""
+Transfer Monori revision 0021 or 0022 into an empty PostgreSQL database atomically.
 
 Usage: DATABASE_URL (from secret) python scripts/import_postgres_0021.py /path/to/monori.db
 The source is opened read-only. Use a cold source for the final switch.
@@ -48,13 +49,16 @@ def transfer(src, dst):
         or src.execute("PRAGMA foreign_key_check").fetchone()
     ):
         raise ValueError("Invalid SQLite source")
-    if src.execute("SELECT version_num FROM alembic_version").fetchall() != [("0021",)]:
+    versions = src.execute("SELECT version_num FROM alembic_version").fetchall()
+    if versions not in ([("0021",)], [("0022",)]):
         raise ValueError("Unsupported source revision")
     if dst.execute(
         "SELECT 1 FROM information_schema.tables WHERE table_schema='public' LIMIT 1"
     ).fetchone():
         raise ValueError("Destination is not empty")
     dst.execute(SCHEMA.read_text())
+    if versions == [("0022",)]:
+        dst.execute(SCHEMA.with_name("0022_refunds.sql").read_text())
     dst.execute("SET CONSTRAINTS ALL DEFERRED")
     src_tables = {
         r[0]

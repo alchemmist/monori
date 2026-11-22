@@ -19,6 +19,7 @@ from monori.server.app.db_records import (
     TransactionRecord,
     UserRecord,
     db_int,
+    row_int,
 )
 from monori.server.app.db_types import DatabaseConnection, DatabaseCursor, DatabaseRow
 from monori.server.app.domain_types import (
@@ -322,8 +323,8 @@ def serialize_transactions(
         " WHERE refund_account.user_id=original_account.user_id",
         (json.dumps(ids),),
     ):
-        refund_id = int(link["refund_tx_id"])
-        original_id = int(link["original_tx_id"])
+        refund_id = row_int(link, "refund_tx_id")
+        original_id = row_int(link, "original_tx_id")
         refund_of[refund_id] = original_id
         refunds.setdefault(original_id, set()).add(refund_id)
     return [

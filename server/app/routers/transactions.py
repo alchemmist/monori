@@ -2,7 +2,6 @@
 """Provide backend functionality."""
 
 import re
-import sqlite3
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +15,7 @@ from monori.server.app.db_records import (
     CategorySignRecord,
     TransactionRecord,
     db_int,
+    db_str,
     row_int,
     row_str,
 )
@@ -210,7 +210,9 @@ def _resolve_category(
     return category_id
 
 
-def _owned_transaction(c: sqlite3.Connection, tx_id: int, uid: int) -> TransactionRecord | None:
+def _owned_transaction(
+    c: dbmod.DatabaseConnection, tx_id: int, uid: int
+) -> TransactionRecord | None:
     row = c.execute(
         "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
         " WHERE t.id=? AND a.user_id=?",
@@ -219,14 +221,20 @@ def _owned_transaction(c: sqlite3.Connection, tx_id: int, uid: int) -> Transacti
     return None if row is None else TransactionRecord.from_row(row)
 
 
-def _refund_total(c: sqlite3.Connection, original_id: int, excluding: int | None = None) -> int:
-    return int(
-        c.execute(
-            "SELECT COALESCE(SUM(t.amount), 0) FROM refund_links r"
-            " JOIN transactions t ON t.id=r.refund_tx_id"
-            " WHERE r.original_tx_id=? AND (? IS NULL OR r.refund_tx_id<>?)",
-            (original_id, excluding, excluding),
-        ).fetchone()[0]
+def _refund_total(
+    c: dbmod.DatabaseConnection, original_id: int, excluding: int | None = None
+) -> int:
+    return db_int(
+        next(
+            iter(
+                c.execute(
+                    "SELECT COALESCE(SUM(t.amount), 0) FROM refund_links r"
+                    " JOIN transactions t ON t.id=r.refund_tx_id"
+                    " WHERE r.original_tx_id=? AND (? IS NULL OR r.refund_tx_id<>?)",
+                    (original_id, excluding, excluding),
+                )
+            )
+        )[0]
     )
 
 
@@ -247,7 +255,7 @@ def _merchant_key(value: str) -> str:
 
 
 def _validate_refund_amount(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     transaction: TransactionRecord,
     amount: int,
     uid: int,
@@ -261,7 +269,7 @@ def _validate_refund_amount(
             raise HTTPException(400, "a linked refund must remain positive")
         original = cast(
             "TransactionRecord",
-            _owned_transaction(c, int(link["original_tx_id"]), uid),
+            _owned_transaction(c, row_int(link, "original_tx_id"), uid),
         )
         if _refund_total(c, original.id, transaction.id) + amount > -original.amount:
             raise HTTPException(400, "refunds cannot exceed the original purchase")
@@ -272,7 +280,7 @@ def _validate_refund_amount(
 
 
 def _validate_refund_date(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     transaction: TransactionRecord,
     date: str,
 ) -> None:
@@ -281,19 +289,23 @@ def _validate_refund_date(
         " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
         (transaction.id,),
     ).fetchone()
-    if original is not None and date < original["date"]:
+    if original is not None and date < row_str(original, "date"):
         raise HTTPException(400, "a refund cannot predate its original purchase")
-    first_refund = c.execute(
-        "SELECT MIN(t.date) AS date FROM refund_links r"
-        " JOIN transactions t ON t.id=r.refund_tx_id WHERE r.original_tx_id=?",
-        (transaction.id,),
-    ).fetchone()["date"]
-    if first_refund is not None and date > first_refund:
+    first_refund = next(
+        iter(
+            c.execute(
+                "SELECT MIN(t.date) AS date FROM refund_links r"
+                " JOIN transactions t ON t.id=r.refund_tx_id WHERE r.original_tx_id=?",
+                (transaction.id,),
+            )
+        )
+    )["date"]
+    if first_refund is not None and date > db_str(first_refund, "date"):
         raise HTTPException(400, "a purchase cannot postdate its refunds")
 
 
 def _edited_category(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     patch: TxPatch,
     transaction: TransactionRecord,
     amount: int,
@@ -309,11 +321,15 @@ def _edited_category(
             raise HTTPException(400, "remove the split before categorizing the parent")
         category = _resolve_category(c, patch.category_id, uid, amount, is_refund=is_refund)
         if is_refund:
-            original_category = c.execute(
-                "SELECT t.category_id FROM refund_links r"
-                " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
-                (transaction.id,),
-            ).fetchone()[0]
+            original_category = next(
+                iter(
+                    c.execute(
+                        "SELECT t.category_id FROM refund_links r"
+                        " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
+                        (transaction.id,),
+                    )
+                )
+            )[0]
             if category != original_category:
                 raise HTTPException(400, "refund category must match the original purchase")
     elif patch.amount is not None and category is not None:
@@ -470,10 +486,12 @@ def patch_transaction(
             account = _resolve_account(c, patch.account_id, uid)
         hidden = int(patch.hidden) if patch.hidden is not None else int(transaction.hidden)
         c.execute(
-            """UPDATE transactions
+            """
+            UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
                    account_id=?, comment=?, hidden=?, hash=?
-               WHERE id=?""",
+               WHERE id=?
+            """,
             (
                 date,
                 amount,
@@ -530,8 +548,7 @@ def refund_suggestions(
             "SELECT original_tx_id FROM refund_links WHERE refund_tx_id=?",
             (refund_tx_id,),
         ).fetchone()
-        current_id = int(current["original_tx_id"]) if current is not None else None
-        c.create_function("refund_merchant_key", 1, _merchant_key, deterministic=True)
+        current_id = row_int(current, "original_tx_id") if current is not None else None
         rows = c.execute(
             "SELECT id, date, amount, description, bank_category, mcc, category_id,"
             " account_id, transfer_id, comment, source, hidden FROM ("
@@ -547,26 +564,29 @@ def refund_suggestions(
             " JOIN category_group_types gt ON gt.id=g.type_id"
             " WHERE c.id=t.category_id AND gt.transaction_sign=-1))"
             " AND t.id<>? AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id))"
+            " AS candidates"
             " WHERE -amount-used_refund>=?"
-            " AND (? OR id=? OR -amount=? OR (?<>'' AND refund_merchant_key(description)=?))"
-            " ORDER BY CASE WHEN ?<>'' AND refund_merchant_key(description)=? THEN 0 ELSE 1 END,"
-            " date DESC, id DESC",
+            " ORDER BY date DESC, id DESC",
             (
                 refund_tx_id,
                 uid,
                 refund.date,
                 refund_tx_id,
                 refund.amount,
-                include_all,
-                current_id,
-                refund.amount,
-                key,
-                key,
-                key,
-                key,
             ),
         ).fetchall()
-        return RefundSuggestionsResponse(rows=serialize_transactions(c.cursor(), rows))
+        suggestions = [
+            row
+            for row in rows
+            if include_all
+            or row_int(row, "id") == current_id
+            or -row_int(row, "amount") == refund.amount
+            or (key and _merchant_key(row_str(row, "description")) == key)
+        ]
+        suggestions.sort(
+            key=lambda row: 0 if key and _merchant_key(row_str(row, "description")) == key else 1
+        )
+        return RefundSuggestionsResponse(rows=serialize_transactions(c.cursor(), suggestions))
     finally:
         c.close()
 
@@ -813,7 +833,7 @@ def bulk_transactions(
                 if (
                     row is not None
                     and row["original_id"] is not None
-                    and int(row["original_id"]) not in selected
+                    and row_int(row, "original_id") not in selected
                     and category != row["original_category"]
                 ):
                     raise HTTPException(400, "refund category must match the original purchase")
