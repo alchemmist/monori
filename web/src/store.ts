@@ -927,6 +927,18 @@ export const useStore = create<StoreState>((set, get) => ({
         set((state) => ({
             snapshot: {
                 ...snapshot,
+                ...(snapshot.demoReconciles && {
+                    demoReconciles: Object.fromEntries(
+                        Object.entries(snapshot.demoReconciles).map(([id, events]) => [
+                            id,
+                            events.map((event) =>
+                                event.adjustmentTxId === txId
+                                    ? { ...event, adjustmentTxId: null }
+                                    : event,
+                            ),
+                        ]),
+                    ),
+                }),
                 transactions: removeRelationships(snapshot.transactions),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },

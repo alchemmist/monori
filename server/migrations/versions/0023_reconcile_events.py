@@ -20,7 +20,7 @@ CREATE TABLE reconcile_events (
     actual_balance INTEGER NOT NULL,
     computed_balance INTEGER NOT NULL,
     delta INTEGER NOT NULL CHECK (delta = actual_balance - computed_balance),
-    adjustment_tx_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL
+    adjustment_tx_id INTEGER UNIQUE REFERENCES transactions (id) ON DELETE SET NULL
 )
 """)
     op.execute(

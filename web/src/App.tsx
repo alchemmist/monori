@@ -336,7 +336,7 @@ export default function App({
                         />
                     </Suspense>
                 )}
-                {page === "transactions" && <TransactionsPage />}
+                {page === "transactions" && <TransactionsPage key={location.search} />}
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
                 {page === "admin" && user?.isAdmin === true && (

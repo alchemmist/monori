@@ -229,6 +229,6 @@ CREATE TABLE IF NOT EXISTS reconcile_events (
   actual_balance INTEGER NOT NULL,
   computed_balance INTEGER NOT NULL,
   delta INTEGER NOT NULL CHECK (delta = actual_balance - computed_balance),
-  adjustment_tx_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL
+  adjustment_tx_id INTEGER UNIQUE REFERENCES transactions (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reconcile_events_account ON reconcile_events (account_id, id DESC);

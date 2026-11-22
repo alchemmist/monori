@@ -6,7 +6,7 @@ CREATE TABLE reconcile_events (
     actual_balance BIGINT NOT NULL,
     computed_balance BIGINT NOT NULL,
     delta BIGINT NOT NULL CHECK (delta = actual_balance - computed_balance),
-    adjustment_tx_id BIGINT REFERENCES transactions (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
+    adjustment_tx_id BIGINT UNIQUE REFERENCES transactions (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 CREATE INDEX idx_reconcile_events_account ON reconcile_events (account_id, id DESC);
 UPDATE alembic_version SET version_num = '0023' WHERE version_num = '0022';
