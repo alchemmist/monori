@@ -8,6 +8,8 @@ COPY ci/pyproject.toml ./ci/pyproject.toml
 COPY server ./server
 RUN pip install --no-cache-dir "uv==0.11.26" && \
     uv sync --group sync-runtime --no-dev && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends "libatomic1=$(dpkg-query -W -f='${Version}' libgcc-s1)" && \
     .venv/bin/playwright install --with-deps chromium && \
     rm -rf /var/lib/apt/lists/*
 EXPOSE 8010
