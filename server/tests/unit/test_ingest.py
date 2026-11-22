@@ -12,6 +12,7 @@ from monori.server.app.importer import CategoryRule
 from monori.server.app.ingest import (
     categorize_rows,
     commit_rows,
+    dedup_text,
     drop_already_present,
     existing_hash_counts,
     historical_day_counts,
@@ -93,7 +94,8 @@ def test_categorize_rows_assigns_by_sign_and_keyword() -> None:
         _row("2026-01-01", -5000, "LENTA store"),
         _row("2026-01-01", -100, "unknown"),
     ]
-    categorize_rows(rows, rules)
+    result = categorize_rows(rows, rules)
+    assert result is rows
     assert [row.category_id for row in rows] == [5, 9, None]
 
 
@@ -151,6 +153,20 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
 
     assert got[1]["bank_category"] == ""
     assert got[1]["mcc"] == ""
+
+
+def test_commit_rows_preserves_values_and_leaves_transaction_to_caller(tmp_path: Path) -> None:
+    c = _db(tmp_path)
+    _seed_categories(c)
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
+    category = _required_int(c.execute("SELECT id FROM categories WHERE name='Food'").fetchone())
+    row = _row("2026-02-03T04:05:06", -1234, "Shop", category_id=category)
+    assert commit_rows(c, acct, [row, row], TransactionSource.IMPORT) == (2, 0)
+    stored = c.execute("SELECT date, amount, description, category_id FROM transactions").fetchall()
+    assert [tuple(r) for r in stored] == [(row.date, row.amount, row.description, category)] * 2
+    assert list(existing_hash_counts(c, acct).values()) == [2]
+    c.rollback()
+    assert c.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 0
 
 
 def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
@@ -272,6 +288,47 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
         ("2026-07-19", -368000, "kafe lesnoj"): 2,
         ("2026-07-18", -50000, "pyaterochka"): 1,
     }
+
+
+def test_historical_counts_normalize_and_scope_user_and_sources(tmp_path: Path) -> None:
+    c = _db(tmp_path)
+    uid = _uid(c)
+    acct = _required_int(c.execute("SELECT id FROM accounts").fetchone())
+    other_uid = _inserted_id(
+        c.execute(
+            "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+            " VALUES ('other@e.co', 'other@e.co', 'h', 't')",
+        )
+    )
+    other_acct = _inserted_id(
+        c.execute(
+            "INSERT INTO accounts (user_id, name, type, currency, sort)"
+            " VALUES (?, 'Other', 'card', 'RUB', 1)",
+            (other_uid,),
+        )
+    )
+    sql = (
+        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
+        " VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    c.executemany(
+        sql,
+        [
+            ("2026-01-01T01:00:00", -10, "Shop! A", acct, "h1", "import"),
+            ("2026-01-01T02:00:00", -10, "SHOP A", acct, "h2", "import"),
+            ("2026-01-01T03:00:00", -10, "Shop A", acct, "h3", "sync"),
+            ("2026-01-01T04:00:00", -10, "Shop A", other_acct, "h4", "import"),
+        ],
+    )
+    assert historical_day_counts(c, uid, (TransactionSource.IMPORT,)) == {
+        ("2026-01-01", -10, "shop a"): 2,
+    }
+    assert historical_day_counts(c, uid, ()) == {}
+
+
+def test_dedup_text_separates_punctuation_and_preserves_unicode_digits() -> None:
+    assert dedup_text("  CAFÉ--42\tB  ") == "café 42 b"
+    assert dedup_text("") == ""
 
 
 def test_drop_already_present_is_count_aware() -> None:
