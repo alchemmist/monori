@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+from monori.ci.lib import flaky_tests
 from monori.ci.lib.flaky_tests import (
+    MAX_ATTEMPT_OUTPUT,
     AttemptResult,
     AttemptStatus,
     CollectedTest,
@@ -15,6 +18,7 @@ from monori.ci.lib.flaky_tests import (
     ProcessResult,
     PytestRunner,
     RunnerStack,
+    SubprocessExecutor,
     VitestRunner,
     added_test_lines,
     discover_repository,
@@ -22,9 +26,12 @@ from monori.ci.lib.flaky_tests import (
     parse_playwright_collection,
     parse_pytest_collection,
     parse_vitest_collection,
+    patch_for_base,
+    read_manifest,
     repeat_tests,
     repository_path,
     select_added_tests,
+    write_manifest,
 )
 
 PATCH = (
@@ -730,3 +737,126 @@ diff --git a/web/e2e/theme.spec.ts b/web/e2e/theme.spec.ts
     for patch, name in requests.values():
         with pytest.raises(RuntimeError, match=f"{name} collection failed"):
             discover_repository("main", Failing(patch))
+
+
+def test_manifest_round_trip_and_invalid_shapes(tmp_path: Path) -> None:
+    test = CollectedTest(RunnerStack.VITEST, Lane.MEDIUM, "web/src/a.test.tsx", 9, "id", "name")
+    manifest = tmp_path / "nested" / "manifest.json"
+    write_manifest(manifest, [test])
+    assert read_manifest(manifest) == (test,)
+    assert manifest.read_text().endswith("\n")
+    manifest.write_text("{}")
+    with pytest.raises(TypeError, match="manifest must be an array"):
+        read_manifest(manifest)
+    manifest.write_text("[null]")
+    with pytest.raises(TypeError, match="manifest entry must be an object"):
+        read_manifest(manifest)
+
+
+@pytest.mark.parametrize("base", ["-main", "main;echo", "", "a b"])
+def test_invalid_base_is_rejected_before_git(base: str) -> None:
+    executor = FakeExecutor(ProcessResult(0, "", 0))
+    with pytest.raises(ValueError, match="Invalid base ref"):
+        patch_for_base(base, executor)
+    assert not executor.calls
+
+
+def test_diff_command_and_failure() -> None:
+    executor = FakeExecutor(ProcessResult(0, "patch", 0.1))
+    assert patch_for_base("origin/feature-1", executor) == "patch"
+    assert executor.calls == [
+        (
+            (
+                "git",
+                "diff",
+                "--unified=0",
+                "--no-ext-diff",
+                "--diff-filter=ACMR",
+                "origin/feature-1...HEAD",
+                "--",
+            ),
+            ".",
+            60,
+        )
+    ]
+    with pytest.raises(RuntimeError, match="Cannot read pull-request diff: broken"):
+        patch_for_base("main", FakeExecutor(ProcessResult(2, "broken", 0.1)))
+
+
+def test_duplicate_selected_identities_are_rejected() -> None:
+    patch = (
+        "diff --git a/web/e2e/a.spec.ts b/web/e2e/a.spec.ts\n"
+        "+++ b/web/e2e/a.spec.ts\n@@ -0,0 +3 @@\n+test\n"
+    )
+    spec = {"title": "same", "id": "one", "file": "a.spec.ts", "line": 3}
+
+    class DuplicateExecutor:
+        def run(
+            self, command: tuple[str, ...], _cwd: str, _timeout_seconds: float
+        ) -> ProcessResult:
+            if command[0] == "git":
+                return ProcessResult(0, patch, 0)
+            return ProcessResult(
+                0, json.dumps({"suites": [{"specs": [spec, {**spec, "id": "two"}]}]}), 0
+            )
+
+    with pytest.raises(RuntimeError, match="Ambiguous expanded test identity"):
+        discover_repository("main", DuplicateExecutor())
+
+
+def test_subprocess_executor_bounds_output_and_reports_timeout() -> None:
+    executor = SubprocessExecutor()
+    result = executor.run(
+        (
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.write('a'*4100); sys.stderr.write('END'); sys.exit(2)",
+        ),
+        ".",
+        10,
+    )
+    assert result.returncode == 2
+    assert result.output == "a" * (MAX_ATTEMPT_OUTPUT - 3) + "END"
+    assert not result.timed_out
+    assert result.duration_seconds >= 0
+    result = executor.run((sys.executable, "-c", "import time; time.sleep(2)"), ".", 0.05)
+    assert result.returncode is None
+    assert result.timed_out
+    assert result.output == "Attempt timed out"
+
+
+@pytest.mark.parametrize("slow", [False, True])
+def test_main_writes_manifest_and_appends_github_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    slow: bool,
+) -> None:
+    test = CollectedTest(RunnerStack.PLAYWRIGHT, Lane.SLOW, "web/e2e/a.spec.ts", 3, "id", "name")
+    tests = (test,) if slow else ()
+    monkeypatch.setattr(
+        flaky_tests, "discover_repository", lambda base, _executor: tests if base == "main" else ()
+    )
+    manifest = tmp_path / "manifest.json"
+    output = tmp_path / "output"
+    output.write_text("previous=1\n")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "flaky_tests",
+            "--base",
+            "main",
+            "--manifest",
+            str(manifest),
+            "--github-output",
+            str(output),
+        ],
+    )
+    assert flaky_tests.main() == 0
+    assert flaky_tests.read_manifest(manifest) == tests
+    assert (
+        output.read_text() == f"previous=1\nhas_slow={str(slow).lower()}\ntest_count={len(tests)}\n"
+    )
+    assert capsys.readouterr().out == f"Discovered {len(tests)} newly added test cases\n"
