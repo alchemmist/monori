@@ -10,8 +10,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
-from monori.server.app.db import begin_write
-from monori.server.app.db_records import CategoryOwnershipRecord, GoalGroupRecord
+from monori.server.app.db import DatabaseConnection, begin_write
+from monori.server.app.db_records import CategoryOwnershipRecord, GoalGroupRecord, row_int, row_str
 from monori.server.app.deps import IdResponse, conn
 from monori.server.app.domain_types import GoalStatus
 
@@ -98,7 +98,7 @@ def _merge_keywords(a: str, b: str) -> str:
     return "|".join(out)
 
 
-def _owned_category(c: sqlite3.Connection, cat_id: int, uid: int) -> CategoryOwnershipRecord | None:
+def _owned_category(c: DatabaseConnection, cat_id: int, uid: int) -> CategoryOwnershipRecord | None:
     row = c.execute(
         "SELECT c.id, c.keywords, c.goal_target, t.type, t.is_goal"
         " FROM categories c JOIN category_groups g ON g.id = c.group_id"
@@ -110,7 +110,7 @@ def _owned_category(c: sqlite3.Connection, cat_id: int, uid: int) -> CategoryOwn
 
 
 def _name_taken(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     group_id: int,
     name: str,
@@ -151,11 +151,14 @@ def create_category(
             raise HTTPException(400, "goalTarget is required for goal categories")
         if _name_taken(c, uid, body.group_id, name):
             raise HTTPException(409, "category with this name already exists")
-        max_sort = c.execute(
-            "SELECT COALESCE(MAX(c.sort),0) FROM categories c"
+        max_sort_row = c.execute(
+            "SELECT COALESCE(MAX(c.sort),0) AS sort FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
             (uid,),
-        ).fetchone()[0]
+        ).fetchone()
+        if max_sort_row is None:
+            raise ValueError
+        max_sort = row_int(max_sort_row, "sort")
         cur = c.execute(
             "INSERT INTO categories (group_id, name, keywords, sort, goal_target, goal_status,"
             " goal_target_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -204,7 +207,7 @@ def patch_category(
 
 
 def _update_category_name(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     cat_id: int,
     uid: int,
     patch: CategoryPatch,
@@ -215,14 +218,14 @@ def _update_category_name(
             row = c.execute("SELECT group_id FROM categories WHERE id=?", (cat_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "category not found")
-            group_id = int(row[0])
+            group_id = row_int(row, "group_id")
         if _name_taken(c, uid, group_id, patch.name, except_id=cat_id):
             raise HTTPException(409, "category with this name already exists")
         c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
 
 
 def _move_category(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     cat_id: int,
     uid: int,
     category: CategoryOwnershipRecord,
@@ -241,7 +244,7 @@ def _move_category(
     name_row = c.execute("SELECT name FROM categories WHERE id=?", (cat_id,)).fetchone()
     if name_row is None:
         raise HTTPException(404, "category not found")
-    if _name_taken(c, uid, patch.group_id, str(name_row[0]), except_id=cat_id):
+    if _name_taken(c, uid, patch.group_id, row_str(name_row, "name"), except_id=cat_id):
         raise HTTPException(409, "category with this name already exists")
     target = GoalGroupRecord.from_row(target_group)
     if target.is_goal and not patch.goal_target_provided and category.goal_target is None:
@@ -256,7 +259,7 @@ def _move_category(
     return target.is_goal
 
 
-def _update_category_fields(c: sqlite3.Connection, cat_id: int, patch: CategoryPatch) -> None:
+def _update_category_fields(c: DatabaseConnection, cat_id: int, patch: CategoryPatch) -> None:
     if patch.keywords is not None:
         c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
     if patch.archived is not None:
@@ -267,7 +270,7 @@ def _update_category_fields(c: sqlite3.Connection, cat_id: int, patch: CategoryP
 
 
 def _update_goal_fields(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     cat_id: int,
     patch: CategoryPatch,
     *,
@@ -355,7 +358,7 @@ def reorder_categories(
     c = conn()
     try:
         known = {
-            r["id"]
+            row_int(r, "id")
             for r in c.execute(
                 "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
                 " WHERE g.user_id=?",

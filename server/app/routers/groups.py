@@ -9,7 +9,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
-from monori.server.app.db_records import GroupRecord
+from monori.server.app.db_records import GroupRecord, row_int
 from monori.server.app.deps import GroupResponse, IdResponse, conn, serialize_group
 from monori.server.app.domain_types import CategoryGroupKind
 
@@ -107,13 +107,16 @@ def create_group(
             (uid, name),
         ).fetchone():
             raise HTTPException(409, "group with this name already exists")
-        max_sort = c.execute(
-            "SELECT COALESCE(MAX(sort),0) FROM category_groups WHERE user_id=?",
+        max_sort_row = c.execute(
+            "SELECT COALESCE(MAX(sort),0) AS sort FROM category_groups WHERE user_id=?",
             (uid,),
-        ).fetchone()[0]
+        ).fetchone()
+        if max_sort_row is None:
+            raise ValueError
+        max_sort = row_int(max_sort_row, "sort")
         cur = c.execute(
             "INSERT INTO category_groups (user_id, name, sort, type_id) VALUES (?, ?, ?, ?)",
-            (uid, name, max_sort + 1, group_type["id"]),
+            (uid, name, max_sort + 1, row_int(group_type, "id")),
         )
         c.commit()
         return IdResponse(id=cur.lastrowid)
@@ -155,7 +158,7 @@ def patch_group(
                 raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
             c.execute(
                 "UPDATE category_groups SET type_id=? WHERE id=?",
-                (group_type["id"], group_id),
+                (row_int(group_type, "id"), group_id),
             )
         c.commit()
         return {"ok": True}
@@ -200,7 +203,8 @@ def reorder_groups(
     c = conn()
     try:
         known = {
-            r["id"] for r in c.execute("SELECT id FROM category_groups WHERE user_id=?", (uid,))
+            row_int(r, "id")
+            for r in c.execute("SELECT id FROM category_groups WHERE user_id=?", (uid,))
         }
         if set(body.ids) != known:
             raise HTTPException(400, "ids must list every existing group exactly once")
