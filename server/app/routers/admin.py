@@ -7,7 +7,6 @@ sees full user data — this is the instance owner's own deployment.
 """
 
 import json
-import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -466,8 +465,6 @@ def create_user_admin(
     """Handle create user admin."""
     c = conn()
     try:
-        if not isinstance(c, sqlite3.Connection):
-            raise HTTPException(501, "admin user creation is not supported by this database")
         return create_user(c, body.email, body.password)
     finally:
         c.close()
