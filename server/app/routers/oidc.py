@@ -18,6 +18,7 @@ from pydantic.dataclasses import dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.db import begin_write
+from monori.server.app.db_records import row_int, row_str
 from monori.server.app.deps import conn
 from monori.server.app.routers.auth_router import (
     OAuthTokenType,
@@ -187,12 +188,15 @@ def _finish(body: Finish, response: Response, uid: int | None) -> TokenResponse:
             "SELECT user_id FROM oidc_identities WHERE issuer=? AND subject=?", identity
         ).fetchone()
         allowed = sso_only_users()
-        if allowed is not None and (uid is not None or row is None or str(row[0]) not in allowed):
+        if allowed is not None and (
+            uid is not None or row is None or str(row_int(row, "user_id")) not in allowed
+        ):
             raise HTTPException(403, "This identity is not admitted to Monori")
         if row is not None:
-            if uid is not None and uid != row[0]:
+            existing_user_id = row_int(row, "user_id")
+            if uid is not None and uid != existing_user_id:
                 raise HTTPException(409, "SSO identity already linked")
-            user_id = int(row[0])
+            user_id = existing_user_id
         else:
             if uid is None:
                 if claims.get("email_verified") is not True or not isinstance(
@@ -208,7 +212,11 @@ def _finish(body: Finish, response: Response, uid: int | None) -> TokenResponse:
                 "INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, ?, ?)",
                 (*identity, user_id),
             )
-        email = c.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()[0]
+        user_row = c.execute("SELECT email FROM users WHERE id=?", (user_id,)).fetchone()
+        if user_row is None:
+            msg = "identity user was not found"
+            raise RuntimeError(msg)
+        email = row_str(user_row, "email")
         record_login(c, user_id, email)
     response.headers["Cache-Control"] = "no-store"
     return TokenResponse(

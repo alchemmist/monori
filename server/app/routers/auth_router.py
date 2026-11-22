@@ -11,7 +11,7 @@ a ``current_user`` dependency other routes can adopt.
 import sqlite3
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
@@ -20,8 +20,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.admin import admin_emails
 from monori.server.app.auth import AuthenticatedUser, current_user
-from monori.server.app.db import begin_write
-from monori.server.app.db_records import UserRecord
+from monori.server.app.db import DatabaseConnection, begin_write
+from monori.server.app.db_records import UserRecord, db_int, row_int, row_str
 from monori.server.app.deps import UserResponse, conn, serialize_user
 from monori.server.app.emails import canonical_email, normalize_email
 from monori.server.app.security import (
@@ -94,7 +94,7 @@ class OAuthTokenType(StrEnum):
 
 
 def create_user(
-    c: sqlite3.Connection, raw_email: str, password: str, *, commit: bool = True
+    c: DatabaseConnection, raw_email: str, password: str, *, commit: bool = True
 ) -> UserResponse:
     """
     Validate and insert a user (with a default Cash account), returning the.
@@ -121,14 +121,18 @@ def create_user(
     except sqlite3.IntegrityError:
         c.rollback()
         raise HTTPException(409, DUPLICATE_EMAIL_DETAIL) from None
-    uid = cast("int", cur.lastrowid)
-    if c.execute(USER_COUNT_SQL).fetchone()[0] == 1:
+    uid = db_int(cur.lastrowid, "lastrowid")
+    count_row = c.execute(USER_COUNT_SQL).fetchone()
+    if count_row is not None and db_int(count_row[0], "count") == 1:
         c.execute(ASSIGN_ACCOUNTS_SQL, (uid,))
         c.execute(ASSIGN_GROUPS_SQL, (uid,))
         c.execute(ASSIGN_CONNECTIONS_SQL, (uid,))
     if not c.execute(USER_ACCOUNT_SQL, (uid,)).fetchone():
         c.execute(INSERT_CASH_ACCOUNT_SQL, (uid,))
-    row = cast("sqlite3.Row", c.execute(SELECT_USER_SQL, (uid,)).fetchone())
+    row = c.execute(SELECT_USER_SQL, (uid,)).fetchone()
+    if row is None:
+        msg = "created user was not found"
+        raise RuntimeError(msg)
     if commit:
         c.commit()
     return serialize_user(UserRecord.from_row(row))
@@ -144,7 +148,7 @@ def register(body: RegisterBody) -> UserResponse:
         c.close()
 
 
-def record_login(c: sqlite3.Connection, user_id: int, email: str) -> None:
+def record_login(c: DatabaseConnection, user_id: int, email: str) -> None:
     """Refresh privileges and audit a successful login in the current transaction."""
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
     admin_canon = {canonical_email(e) for e in admin_emails()}
@@ -173,11 +177,8 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
 
         if row is None:
             raise HTTPException(401, "no account is registered for this email")
-        password_hash = row["password_hash"]
-        user_id = row["id"]
-        if not isinstance(password_hash, str) or not isinstance(user_id, int):
-            msg = "stored user credentials have invalid types"
-            raise TypeError(msg)
+        password_hash = row_str(row, "password_hash")
+        user_id = row_int(row, "id")
         if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
 
