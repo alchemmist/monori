@@ -185,16 +185,30 @@ describe("ImportPanel", () => {
         await user.click(categorySelect);
         await user.click(await screen.findByRole("option", { name: "Groceries" }));
         expect(screen.getByRole("button", { name: "Groceries" })).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Groceries" }));
+        await user.click(await screen.findByRole("option", { name: "Uncategorized" }));
+        expect(screen.getByRole("button", { name: "Uncategorized" })).toBeInTheDocument();
     });
 
-    it("offers income categories for positive amounts", async () => {
+    it("offers income and expense categories for positive amounts", async () => {
+        seed({
+            accounts,
+            transactions: [
+                {
+                    id: 7,
+                    date: "2026-07-01",
+                    description: "Shop",
+                    amount: -100_00,
+                },
+            ],
+        });
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [
                 {
                     date: "2026-07-03",
                     card: "",
-                    description: "Paycheck",
-                    amount: 90000,
+                    description: "Shop refund",
+                    amount: 24_00,
                     accountId: 1,
                     categoryId: null,
                     duplicate: false,
@@ -204,11 +218,92 @@ describe("ImportPanel", () => {
         });
         const { container, user } = renderUI(<ImportPanel onClose={vi.fn()} />);
         upload(container);
-        await screen.findByText("Paycheck");
+        await screen.findByText("Shop refund");
+        expect(screen.getByText("looks like a refund of Shop")).toBeInTheDocument();
 
         await user.click(screen.getByRole("button", { name: "Uncategorized" }));
         expect(await screen.findByRole("option", { name: "Salary" })).toBeInTheDocument();
-        expect(screen.queryByRole("option", { name: "Groceries" })).not.toBeInTheDocument();
+        expect(screen.getByRole("option", { name: "Groceries" })).toBeInTheDocument();
+    });
+
+    it("does not overbook a purchase across import refund hints", async () => {
+        seed({
+            accounts,
+            transactions: [
+                { id: 7, date: "2026-07-01", description: "Shop", amount: -100_00 },
+                {
+                    id: 8,
+                    date: "2026-07-02",
+                    description: "Shop refund",
+                    amount: 80_00,
+                    refundOfId: 7,
+                },
+            ],
+        });
+        vi.spyOn(api, "importPreview").mockResolvedValue({
+            rows: [
+                {
+                    date: "2026-07-03",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 15_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+                {
+                    date: "2026-07-04",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 15_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+            ],
+            errors: [],
+        });
+        const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
+
+        upload(container);
+        await screen.findAllByText("Shop refund");
+
+        expect(screen.getAllByText("looks like a refund of Shop")).toHaveLength(1);
+    });
+
+    it("does not suggest a split purchase as an import refund", async () => {
+        seed({
+            accounts,
+            transactions: [
+                {
+                    id: 7,
+                    date: "2026-07-01",
+                    description: "Shop",
+                    amount: -100_00,
+                    splits: [{ id: 1, amount: -100_00, categoryId: 2, comment: "" }],
+                },
+            ],
+        });
+        vi.spyOn(api, "importPreview").mockResolvedValue({
+            rows: [
+                {
+                    date: "2026-07-03",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 24_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+            ],
+            errors: [],
+        });
+        const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
+
+        upload(container);
+        await screen.findByText("Shop refund");
+
+        expect(screen.queryByText(/looks like a refund of/i)).not.toBeInTheDocument();
     });
 
     it("renders unparsed lines and their per-line detail", async () => {

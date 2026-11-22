@@ -132,6 +132,35 @@ describe("topMerchants", () => {
         expect(pyat!.count).toBe(2);
         expect(top[0]).toBe(pyat);
     });
+
+    it("attributes a linked refund to the original purchase merchant", () => {
+        const refunded = buildSnapshot({
+            groups: [{ id: 1, name: "Expenses", kind: "expense", sort: 1 }],
+            categories: [{ id: 1, groupId: 1, name: "Shopping", sort: 1 }],
+            transactions: [
+                {
+                    id: 1,
+                    date: "2024-01-10",
+                    amount: -1000,
+                    description: "Shop A",
+                    categoryId: 1,
+                    refundIds: [2],
+                },
+                {
+                    id: 2,
+                    date: "2024-01-12",
+                    amount: 400,
+                    description: "Card adjustment",
+                    categoryId: 1,
+                    refundOfId: 1,
+                },
+            ],
+        });
+
+        expect(topMerchants(refunded, "2024")).toEqual([
+            { name: "SHOP A", fullName: "Shop A", total: 600, count: 1 },
+        ]);
+    });
 });
 
 describe("categoryYearMatrix", () => {
@@ -890,5 +919,22 @@ describe("charts vs budget table parity", () => {
         const [row] = categoryYearMatrix(snap, "2024", { limit: Infinity });
         expect(row!.total).toBe(-engineYear);
         expect(row!.total).toBe(424_776_00);
+    });
+});
+
+describe("expense profiles with linked refunds", () => {
+    it.each([
+        { name: "weekday", profile: weekdayProfile, index: 0 },
+        { name: "day of month", profile: dayOfMonthProfile, index: 4 },
+    ])("nets same-day refunds in the $name bucket", ({ profile, index }) => {
+        const refunded = buildSnapshot({
+            transactions: [
+                { id: 1, date: "2026-01-05", amount: -1000, categoryId: 2 },
+                { id: 2, date: "2026-01-05", amount: 400, categoryId: 2, refundOfId: 1 },
+            ],
+        });
+        expect(monthlySeries(refunded)[0]?.[1].expense).toBe(600);
+        expect(profile(refunded, "2026")[index]).toBe(600);
+        expect(profile(refunded, "2026").reduce((sum, amount) => sum + amount, 0)).toBe(600);
     });
 });

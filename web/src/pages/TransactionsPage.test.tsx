@@ -198,6 +198,149 @@ describe("TransactionsPage", () => {
         await waitFor(() => expect(setTxCategory).toHaveBeenCalledWith(1, 2));
     });
 
+    it("offers expense categories for a positive refund", async () => {
+        seed({
+            accounts,
+            groups: [...groups, { id: 4, name: "Income", kind: "income", sort: 2 }],
+            categories: [
+                ...categories,
+                { id: 4, groupId: 4, name: "Salary", archived: false, sort: 1 },
+            ],
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [2] }),
+                tx(2, {
+                    amount: 2400,
+                    categoryId: 2,
+                    accountId: 1,
+                    refundOfId: 1,
+                }),
+            ],
+        });
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        const categorySelect = row.querySelectorAll<HTMLElement>("button.gsel")[1]!;
+
+        await user.click(categorySelect);
+
+        const food = screen.getByRole("option", { name: "Food", hidden: true });
+        const dropdown = food.closest<HTMLElement>(".gsel__drop")!;
+        expect(food).toBeInTheDocument();
+        expect(
+            within(dropdown).queryByRole("option", { name: "Salary", hidden: true }),
+        ).not.toBeInTheDocument();
+        expect(
+            within(dropdown).queryByRole("option", { name: "Leave uncategorized", hidden: true }),
+        ).not.toBeInTheDocument();
+        await user.click(categorySelect);
+        await waitFor(() => expect(food).not.toBeInTheDocument());
+    });
+
+    it("opens and removes refund links from the row menu", async () => {
+        seed({ transactions: [tx(1, { amount: -10000 }), tx(2, { amount: 2400 })] });
+        const { user, unmount } = renderUI(<TransactionsPage />);
+        let row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Mark as refund"));
+        expect(
+            await screen.findByText("Mark as refund", { selector: ".mantine-Modal-title" }),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
+        unmount();
+
+        seed({
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [2] }),
+                tx(2, { amount: 2400, refundOfId: 1 }),
+            ],
+        });
+        const unlink = vi.spyOn(useStore.getState(), "unlinkRefund").mockResolvedValue();
+        const scrollIntoView = vi.fn();
+        const rendered = renderUI(<TransactionsPage />);
+        vi.spyOn(document, "querySelector").mockImplementation((selector) =>
+            selector.startsWith("[data-transaction-id=")
+                ? ({ scrollIntoView } as unknown as Element)
+                : null,
+        );
+        expect(screen.getByText("refunded · 1")).toBeInTheDocument();
+        await rendered.user.click(screen.getByRole("button", { name: "refunded · 1" }));
+        expect(scrollIntoView).toHaveBeenCalled();
+        row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        await rendered.user.click(within(row).getByRole("button", { name: "refund" }));
+        expect(scrollIntoView).toHaveBeenCalledTimes(2);
+        await rendered.user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Unlink refund"));
+        expect(unlink).toHaveBeenCalledWith(2);
+    });
+
+    it("reveals an off-screen purchase when its refund badge is clicked", async () => {
+        vi.stubGlobal("scrollY", 0);
+        vi.stubGlobal("innerHeight", 800);
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+            this: HTMLElement,
+        ) {
+            if (this.tagName === "TBODY")
+                return DOMRect.fromRect({ y: 100 - window.scrollY, height: 4040 });
+            if (this.matches("tr.cat-row")) return DOMRect.fromRect({ height: 40 });
+            return DOMRect.fromRect({ width: 1200, height: 900 });
+        });
+        seed({
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [101] }),
+                ...Array.from({ length: 99 }, (_, index) => tx(index + 2)),
+                tx(101, { amount: 2400, refundOfId: 1 }),
+            ],
+        });
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
+        expect(screen.queryByText("tx 1")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "refund" }));
+        expect(scrollTo).toHaveBeenCalledWith({ top: 3700, behavior: "smooth" });
+        vi.stubGlobal("scrollY", 3700);
+        fireEvent.scroll(window);
+        expect(await screen.findByText("tx 1")).toBeInTheDocument();
+    });
+
+    it("explains when a linked purchase is outside the visible ledger", async () => {
+        seed({ transactions: [tx(2, { amount: 2400, refundOfId: 1 })] });
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
+        await user.click(screen.getByRole("button", { name: "refund" }));
+        expect(useStore.getState().toast?.title).toBe(
+            "Linked transaction is hidden by the current filters",
+        );
+        expect(scrollTo).not.toHaveBeenCalled();
+    });
+
+    it("reports a failed unlink and runs the hide action", async () => {
+        seed({ transactions: [tx(1, { amount: 2400, refundOfId: 2 })] });
+        vi.spyOn(useStore.getState(), "unlinkRefund").mockRejectedValue("offline");
+        const hide = vi.spyOn(useStore.getState(), "hideTx").mockResolvedValue();
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest<HTMLElement>("tr")!;
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Unlink refund"));
+        await waitFor(() =>
+            expect(useStore.getState().toast?.title).toBe("Failed to unlink refund"),
+        );
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Hide transaction"));
+        expect(hide).toHaveBeenCalledWith(1);
+    });
+
+    it("opens the split editor from the row menu", async () => {
+        seed({ transactions: [tx(1)] });
+        const openTab = vi.spyOn(useStore.getState(), "openTab");
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest<HTMLElement>("tr")!;
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Split transaction"));
+
+        expect(openTab).toHaveBeenCalledWith("tx-split", { transactionId: 1 }, "tx-split-1");
+    });
+
     it("offers import and transfer controls and disables transfer with one active account", () => {
         seed({ accounts, transactions: [] });
         const { unmount } = renderUI(<TransactionsPage />);
@@ -418,7 +561,7 @@ describe("TransactionsPage", () => {
         expect(screen.getByText("0 ₽")).toBeInTheDocument();
     });
 
-    it("offers only income categories for a positive row", async () => {
+    it("offers income and expense categories for a positive row", async () => {
         seed({
             accounts,
             groups: [
@@ -439,16 +582,24 @@ describe("TransactionsPage", () => {
 
         await user.click(selects[1]!);
 
-        expect(screen.getByRole("option", { name: "Salary", hidden: true })).toBeInTheDocument();
+        const salary = screen.getByRole("option", { name: "Salary", hidden: true });
+        const dropdown = salary.closest<HTMLElement>(".gsel__drop")!;
+        expect(salary).toBeInTheDocument();
         expect(
-            screen.queryByRole("option", { name: "Food", hidden: true }),
-        ).not.toBeInTheDocument();
+            within(dropdown).getByRole("option", { name: "Food", hidden: true }),
+        ).toBeInTheDocument();
     });
 
-    it("hides the back-to-top button until the page is scrolled", () => {
+    it("shows the back-to-top button after scrolling", async () => {
         seed({ transactions: [tx(1, { description: "Item", date: "2026-03-01" })] });
-        renderUI(<TransactionsPage />);
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
         expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+        Object.defineProperty(window, "scrollY", { configurable: true, value: 2_000 });
+        fireEvent.scroll(window);
+        const button = await screen.findByRole("button", { name: "Back to top" });
+        await user.click(button);
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
     });
 
     it("renders a transfer as a single merged row with no per-row action menu", () => {

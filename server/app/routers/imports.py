@@ -305,8 +305,6 @@ def _validate_import_categories(c: DatabaseConnection, uid: int, rows: list[Comm
         sign = row_int(category, "transaction_sign")
         if row.amount < 0 and sign != -1:
             raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and sign != 1:
-            raise HTTPException(400, "income transaction requires an income category")
 
 
 def _card_digits(card: str) -> str:
@@ -382,22 +380,8 @@ def import_preview(
         )
         _detect_row_accounts(c, uid, rows, fallback_account_id)
 
-        kinds = {
-            row_int(r, "id"): row_str(r, "kind")
-            for r in c.execute(
-                "SELECT c.id, t.type AS kind FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id"
-                " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
-                (uid,),
-            )
-        }
         for row in rows:
-            category_id = categorize(row.description, row.amount, rules)
-            if category_id is not None:
-                expected = "expense" if row.amount < 0 else "income"
-                if kinds.get(category_id) != expected:
-                    category_id = None
-            row.category_id = category_id
+            row.category_id = categorize(row.description, row.amount, rules)
         _mark_duplicates(c, rows)
         return ImportPreviewResponse(
             rows=[_serialize_import_row(row) for row in rows],

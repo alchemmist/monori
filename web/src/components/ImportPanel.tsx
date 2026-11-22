@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@mantine/core";
 import { api } from "../api.js";
 import { readStatementFile } from "../importFile.js";
+import { refundMerchantKey } from "../engine/refunds.js";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
 import InlineSelect from "../ui/InlineSelect.jsx";
@@ -19,6 +20,23 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     if (!snapshot) throw new Error("Import requires a loaded snapshot");
     const accounts = snapshot.accounts.filter((a) => !a.archived);
     const categories = snapshot.categories.filter((c) => !c.archived);
+    const purchasesByMerchant = useMemo(() => {
+        const purchases = new Map<string, typeof snapshot.transactions>();
+        for (const transaction of snapshot.transactions) {
+            if (
+                transaction.amount >= 0 ||
+                transaction.transferId != null ||
+                (transaction.splits?.length ?? 0) > 0
+            )
+                continue;
+            const merchant = refundMerchantKey(transaction.description);
+            if (merchant === "") continue;
+            const rows = purchases.get(merchant) ?? [];
+            rows.push(transaction);
+            purchases.set(merchant, rows);
+        }
+        return purchases;
+    }, [snapshot]);
     const fileRef = useRef<HTMLInputElement>(null);
     const [fileName, setFileName] = useState("");
     const [rows, setRows] = useState<ImportRow[] | null>(null);
@@ -26,6 +44,35 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     const [busy, setBusy] = useState(false);
     const [checkingDuplicates, setCheckingDuplicates] = useState(false);
     const duplicateEpoch = useRef(0);
+    const refundHints = useMemo(() => {
+        if (!rows) return [];
+        const used = new Map<number, number>();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.refundOfId == null) continue;
+            used.set(
+                transaction.refundOfId,
+                (used.get(transaction.refundOfId) ?? 0) + transaction.amount,
+            );
+        }
+        const remaining = new Map<number, number>();
+        for (const purchases of purchasesByMerchant.values()) {
+            for (const purchase of purchases)
+                remaining.set(purchase.id, -purchase.amount - (used.get(purchase.id) ?? 0));
+        }
+        return rows.map((row) => {
+            if (row.amount <= 0 || row.duplicate === true) return null;
+            const merchant = refundMerchantKey(row.description);
+            const purchase = purchasesByMerchant
+                .get(merchant)
+                ?.find(
+                    (candidate) =>
+                        candidate.date <= row.date && remaining.get(candidate.id)! >= row.amount,
+                );
+            if (purchase)
+                remaining.set(purchase.id, (remaining.get(purchase.id) ?? 0) - row.amount);
+            return purchase ?? null;
+        });
+    }, [purchasesByMerchant, rows, snapshot.transactions]);
 
     const accountOptions = accounts.map((a) => ({ value: String(a.id), label: a.name }));
     const categoryOptionsFor = (amount: number) => [
@@ -33,7 +80,9 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
         ...categories
             .filter((c) => {
                 const group = snapshot.groups.find((g) => g.id === c.groupId);
-                return amount === 0 || group?.kind === (amount < 0 ? "expense" : "income");
+                return amount >= 0
+                    ? group?.kind === "income" || group?.kind === "expense"
+                    : group?.kind === "expense";
             })
             .map((c) => ({ value: String(c.id), label: c.name })),
     ];
@@ -232,83 +281,98 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {rows.map((row, index) => (
-                                    <tr
-                                        key={index}
-                                        style={{ opacity: row.duplicate === true ? 0.48 : 1 }}
-                                    >
-                                        <td
-                                            className="num import-date"
-                                            style={{ textAlign: "left" }}
+                                {rows.map((row, index) => {
+                                    const refundHint = refundHints[index];
+                                    return (
+                                        <tr
+                                            key={index}
+                                            style={{ opacity: row.duplicate === true ? 0.48 : 1 }}
                                         >
-                                            <span className="import-date__full">
-                                                {fmtDate(row.date)}
-                                            </span>
-                                            <span className="import-date__short">
-                                                {fmtDate(row.date).slice(0, 5)}
-                                            </span>
-                                        </td>
-                                        <td
-                                            style={{
-                                                textAlign: "left",
-                                                overflow: "hidden",
-                                                textOverflow: "ellipsis",
-                                            }}
-                                            title={row.description}
-                                        >
-                                            {row.description}
-                                        </td>
-                                        <td>
-                                            <span
-                                                className={`money num ${row.amount > 0 ? "money_pos" : ""}`}
+                                            <td
+                                                className="num import-date"
+                                                style={{ textAlign: "left" }}
                                             >
-                                                {money(row.amount)}
-                                            </span>
-                                        </td>
-                                        <td
-                                            className="num import-card"
-                                            style={{ textAlign: "left" }}
-                                        >
-                                            {row.card == null || row.card === "" ? "—" : row.card}
-                                        </td>
-                                        <td style={{ textAlign: "left" }}>
-                                            <InlineSelect
-                                                small
-                                                searchable
-                                                fullWidth
-                                                value={
-                                                    row.accountId == null
-                                                        ? ""
-                                                        : String(row.accountId)
-                                                }
-                                                onChange={(value) => changeAccount(index, value)}
-                                                data={accountOptions}
-                                                placeholder="Choose account"
-                                            />
-                                        </td>
-                                        <td
-                                            className="import-category"
-                                            style={{ textAlign: "left" }}
-                                        >
-                                            <InlineSelect
-                                                small
-                                                searchable
-                                                fullWidth
-                                                value={
-                                                    row.categoryId == null
-                                                        ? ""
-                                                        : String(row.categoryId)
-                                                }
-                                                onChange={(value) =>
-                                                    changeRow(index, {
-                                                        categoryId: value ? Number(value) : null,
-                                                    })
-                                                }
-                                                data={categoryOptionsFor(row.amount)}
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
+                                                <span className="import-date__full">
+                                                    {fmtDate(row.date)}
+                                                </span>
+                                                <span className="import-date__short">
+                                                    {fmtDate(row.date).slice(0, 5)}
+                                                </span>
+                                            </td>
+                                            <td
+                                                style={{
+                                                    textAlign: "left",
+                                                    overflow: "hidden",
+                                                    textOverflow: "ellipsis",
+                                                }}
+                                                title={row.description}
+                                            >
+                                                {row.description}
+                                                {refundHint && (
+                                                    <Txt tone="secondary" caption block>
+                                                        looks like a refund of{" "}
+                                                        {refundHint.description}
+                                                    </Txt>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <span
+                                                    className={`money num ${row.amount > 0 ? "money_pos" : ""}`}
+                                                >
+                                                    {money(row.amount)}
+                                                </span>
+                                            </td>
+                                            <td
+                                                className="num import-card"
+                                                style={{ textAlign: "left" }}
+                                            >
+                                                {row.card == null || row.card === ""
+                                                    ? "—"
+                                                    : row.card}
+                                            </td>
+                                            <td style={{ textAlign: "left" }}>
+                                                <InlineSelect
+                                                    small
+                                                    searchable
+                                                    fullWidth
+                                                    value={
+                                                        row.accountId == null
+                                                            ? ""
+                                                            : String(row.accountId)
+                                                    }
+                                                    onChange={(value) =>
+                                                        changeAccount(index, value)
+                                                    }
+                                                    data={accountOptions}
+                                                    placeholder="Choose account"
+                                                />
+                                            </td>
+                                            <td
+                                                className="import-category"
+                                                style={{ textAlign: "left" }}
+                                            >
+                                                <InlineSelect
+                                                    small
+                                                    searchable
+                                                    fullWidth
+                                                    value={
+                                                        row.categoryId == null
+                                                            ? ""
+                                                            : String(row.categoryId)
+                                                    }
+                                                    onChange={(value) =>
+                                                        changeRow(index, {
+                                                            categoryId: value
+                                                                ? Number(value)
+                                                                : null,
+                                                        })
+                                                    }
+                                                    data={categoryOptionsFor(row.amount)}
+                                                />
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
