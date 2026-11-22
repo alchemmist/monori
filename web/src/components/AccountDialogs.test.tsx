@@ -1,7 +1,10 @@
+import { act } from "@testing-library/react";
+import type { ReconcileEvent } from "../types.js";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
+import { renderUI, resetStore, screen, seed, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
-import { AccountDeleteDialog, AccountEditTab, AccountReconcileDialog } from "./AccountDialogs.jsx";
+import { AccountDeleteDialog, AccountEditTab, AccountReconcileTab } from "./AccountDialogs.jsx";
 
 const account = {
     id: 1,
@@ -78,21 +81,196 @@ describe("account dialogs", () => {
 
     it("posts a reconciliation adjustment and validates bad balances", async () => {
         seed({ accounts: [account] });
+        vi.spyOn(useStore.getState(), "reconcileHistory")
+            .mockResolvedValueOnce([])
+            .mockResolvedValue([
+                {
+                    id: 1,
+                    createdAt: "2026-03-01T00:00:00Z",
+                    actualBalance: 10250,
+                    computedBalance: 10000,
+                    delta: 250,
+                    adjustmentTxId: null,
+                },
+            ]);
         const reconcile = vi
             .spyOn(useStore.getState(), "reconcileAccount")
             .mockResolvedValue({ delta: 250 });
         const notify = vi.spyOn(useStore.getState(), "notify");
         const close = vi.fn();
         const { user } = renderUI(
-            <AccountReconcileDialog account={account} balance={10000} onClose={close} />,
+            <AccountReconcileTab account={account} balance={10000} onClose={close} />,
         );
         expect(screen.getByText(/Computed balance/)).toBeInTheDocument();
+        expect(screen.getByText(/No adjustment needed/)).toBeVisible();
         await user.clear(screen.getByLabelText("Actual bank balance"));
+
         await user.type(screen.getByLabelText("Actual bank balance"), "102.50");
+        expect(screen.getByText(/will be posted/)).toBeVisible();
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         await waitFor(() => expect(reconcile).toHaveBeenCalledWith(1, 10250));
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ theme: "success" }));
-        expect(close).toHaveBeenCalled();
+        expect(await screen.findByText("Adjusted")).toBeVisible();
+        expect(close).not.toHaveBeenCalled();
+    });
+
+    it("tracks live balances except while editing, then resets the draft after saving", async () => {
+        seed({ accounts: [account] });
+        const fetchHistory = vi
+            .spyOn(useStore.getState(), "reconcileHistory")
+            .mockResolvedValue([]);
+        const save = vi
+            .spyOn(useStore.getState(), "reconcileAccount")
+            .mockResolvedValue({ delta: 0 });
+        const tab = (balance: number) => (
+            <AccountReconcileTab account={account} balance={balance} onClose={vi.fn()} />
+        );
+        const { user, rerender } = renderUI(tab(10000));
+        const field = screen.getByLabelText<HTMLInputElement>("Actual bank balance");
+        rerender(tab(12000));
+        expect(Number(field.value)).toBe(120);
+        await user.clear(field);
+        await user.type(field, "99");
+        rerender(tab(13000));
+        expect(Number(field.value)).toBe(99);
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenCalledWith(1, 9900);
+        rerender(tab(9900));
+        rerender(tab(14000));
+        expect(Number(field.value)).toBe(140);
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenLastCalledWith(1, 14000);
+        await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(3));
+    });
+
+    it("does not carry a typed balance to another account", async () => {
+        seed({ accounts: [account] });
+        const save = vi
+            .spyOn(useStore.getState(), "reconcileAccount")
+            .mockResolvedValue({ delta: 0 });
+        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([]);
+        const view = renderUI(
+            <AccountReconcileTab account={account} balance={5000} onClose={vi.fn()} />,
+        );
+        await view.user.clear(screen.getByLabelText("Actual bank balance"));
+        await view.user.type(screen.getByLabelText("Actual bank balance"), "123");
+        view.rerender(
+            <AccountReconcileTab
+                account={{ ...account, id: 2 }}
+                balance={2200}
+                onClose={vi.fn()}
+            />,
+        );
+        await view.user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenCalledWith(2, 2200);
+    });
+
+    it("keeps the open demo receipt but removes its deleted adjustment link", async () => {
+        setPath("/demo/accounts");
+        try {
+            seed({ accounts: [account] });
+            const store = useStore.getState();
+            await store.reconcileAccount(1, 12345);
+            const [receipt] = await store.reconcileHistory(1);
+            renderUI(
+                <MemoryRouter>
+                    <AccountReconcileTab account={account} balance={12345} onClose={vi.fn()} />
+                </MemoryRouter>,
+            );
+            expect(await screen.findByRole("link")).toBeVisible();
+            await act(async () => {
+                await store.deleteTransaction(receipt!.adjustmentTxId!);
+            });
+            await waitFor(() => expect(screen.queryByRole("link")).not.toBeInTheDocument());
+            expect(await screen.findByText("Adjusted")).toBeVisible();
+        } finally {
+            setPath("/");
+        }
+    });
+
+    it.each(["success", "failure"])(
+        "ignores a late %s after switching accounts",
+        async (outcome) => {
+            let settle!: (rows: ReconcileEvent[]) => void;
+            let stale!: (error: Error) => void;
+            const first = new Promise<ReconcileEvent[]>((resolve, reject) => {
+                settle = resolve;
+                stale = reject;
+            });
+            let offline!: (error: Error) => void;
+            const second = new Promise<ReconcileEvent[]>((_resolve, reject) => {
+                offline = reject;
+            });
+            vi.spyOn(useStore.getState(), "reconcileHistory")
+                .mockResolvedValueOnce([])
+                .mockReturnValueOnce(first)
+                .mockReturnValueOnce(second);
+            const dialog = (id: number) => (
+                <AccountReconcileTab account={{ ...account, id }} balance={0} onClose={vi.fn()} />
+            );
+            const view = renderUI(dialog(1));
+            expect(await screen.findByText("No reconciliations recorded.")).toBeInTheDocument();
+            view.rerender(dialog(2));
+            expect(screen.getByText("Loading reconciliation history…")).toBeInTheDocument();
+            view.rerender(dialog(3));
+            await act(async () => {
+                if (outcome === "success") settle([]);
+                else stale(new Error("stale"));
+                await Promise.resolve();
+            });
+            expect(screen.getByText("Loading reconciliation history…")).toBeInTheDocument();
+            offline(new Error("offline"));
+            expect(
+                await screen.findByText("Could not load reconciliation history."),
+            ).toBeInTheDocument();
+        },
+    );
+
+    it.each(["", "/demo"])("displays receipts and adjustment links under %s", async (prefix) => {
+        setPath(`${prefix}/accounts`);
+        seed({ accounts: [account] });
+        const event = {
+            id: 2,
+            createdAt: "2026-03-04T12:00:00Z",
+            computedBalance: 9000,
+            actualBalance: 9000,
+            delta: 0,
+            adjustmentTxId: null,
+        };
+        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([
+            event,
+            { ...event, id: 1, computedBalance: 7490, delta: 1510, adjustmentTxId: 42 },
+        ]);
+        const { user } = renderUI(
+            <MemoryRouter>
+                <AccountReconcileTab account={account} balance={9000} onClose={vi.fn()} />
+            </MemoryRouter>,
+        );
+        await user.click(await screen.findByText(/Last reconciled:/));
+        const stamp = new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+        }).format(new Date(event.createdAt));
+        expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(stamp);
+        expect(screen.getByText("Matched")).toHaveAttribute("data-match", "true");
+        expect(screen.getByText("Adjusted")).toHaveAttribute("data-match", "false");
+        const differences = screen
+            .getAllByText("Difference")
+            .map((label) => label.nextElementSibling?.textContent);
+        const rub = (value: number, digits: number) =>
+            new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency: "RUB",
+                minimumFractionDigits: digits,
+            }).format(value);
+        expect(differences).toEqual([rub(0, 0), `+${rub(15.1, 2)}`]);
+        expect(screen.getAllByRole("listitem")).toHaveLength(2);
+        expect(screen.getAllByRole("link")).toHaveLength(1);
+        expect(screen.getByRole("link", { name: "Adjustment #42" })).toHaveAttribute(
+            "href",
+            `${prefix}/transactions?transactionId=42`,
+        );
+        setPath("/");
     });
 
     it("updates an existing account and reports a failed save", async () => {
@@ -208,13 +386,14 @@ describe("account dialogs", () => {
         const reconcile = vi.spyOn(useStore.getState(), "reconcileAccount");
         const notify = vi.spyOn(useStore.getState(), "notify");
         const { user, rerender } = renderUI(
-            <AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />,
+            <AccountReconcileTab account={account} balance={10000} onClose={vi.fn()} />,
         );
         await user.clear(screen.getByLabelText("Actual bank balance"));
         await user.type(screen.getByLabelText("Actual bank balance"), "-");
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(screen.queryByText(/No adjustment needed|will be posted/)).not.toBeInTheDocument();
         expect(reconcile).not.toHaveBeenCalled();
-        expect(notify).toHaveBeenCalledWith({ title: "Balance is not a number", theme: "danger" });
+        expect(screen.getByRole("button", { name: "Reconcile" })).toBeDisabled();
         reconcile.mockResolvedValue({ delta: 0 });
         await user.clear(screen.getByLabelText("Actual bank balance"));
         await user.type(screen.getByLabelText("Actual bank balance"), "100");
@@ -222,7 +401,7 @@ describe("account dialogs", () => {
         await waitFor(() =>
             expect(notify).toHaveBeenCalledWith({ title: "Already reconciled", theme: "success" }),
         );
-        rerender(<AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />);
+        rerender(<AccountReconcileTab account={account} balance={10000} onClose={vi.fn()} />);
         reconcile.mockRejectedValue(new Error("offline"));
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         await waitFor(() =>

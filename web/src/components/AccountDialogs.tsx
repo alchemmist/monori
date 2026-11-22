@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { Button } from "@mantine/core";
 import { TrashBin } from "@gravity-ui/icons";
-import { useStore } from "../store.js";
+import { isDemo, useStore } from "../store.js";
 import { parseRub, money, amountInput } from "../format.js";
 import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
 import { DEFAULT_CURRENCY, currencyOptions } from "../currencies.js";
@@ -10,7 +11,7 @@ import AppDialog from "../ui/AppDialog.jsx";
 import Tab from "../ui/Tab.jsx";
 import { FAmountInput, FSelect, FTextInput } from "../ui/fields.jsx";
 import Txt from "../ui/Txt.jsx";
-import type { Account } from "../types.js";
+import type { Account, ReconcileEvent } from "../types.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -336,17 +337,38 @@ export function AccountDeleteDialog({
     );
 }
 
-export function AccountReconcileDialog({
-    account,
-    balance,
-    onClose,
-}: {
+interface ReconcileTabProps {
     account: Account;
     balance: number;
     onClose: () => void;
-}) {
-    const { reconcileAccount, notify } = useStore();
-    const [actual, setActual] = useState(amountInput(balance));
+}
+
+export function AccountReconcileTab(props: ReconcileTabProps) {
+    return <ReconcileForm key={props.account.id} {...props} />;
+}
+
+function ReconcileForm({ account, balance, onClose }: ReconcileTabProps) {
+    const { reconcileAccount, reconcileHistory, notify, snapshot } = useStore();
+    const demoReceipts = snapshot?.demoReconciles?.[account.id];
+    const [history, setHistory] = useState<ReconcileEvent[] | "failed" | null>(null);
+    const [historyVersion, refreshHistory] = useState<symbol>();
+    useEffect(() => {
+        let current = true;
+        setHistory(null);
+        void reconcileHistory(account.id).then(
+            (rows) => {
+                if (current) setHistory(rows);
+            },
+            () => {
+                if (current) setHistory("failed");
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [account.id, reconcileHistory, historyVersion, demoReceipts]);
+    const [draft, setActual] = useState<string | null>(null);
+    const actual = draft ?? amountInput(balance);
     const [busy, setBusy] = useState(false);
     const actualKop = parseRub(actual);
     const delta = actualKop == null ? null : actualKop - balance;
@@ -366,7 +388,8 @@ export function AccountReconcileDialog({
                         : `Adjustment of ${money(res.delta)} posted`,
                 theme: "success",
             });
-            onClose();
+            setActual(null);
+            refreshHistory(Symbol());
         } catch (e) {
             notify({ title: "Failed to reconcile", theme: "danger", content: String(e) });
         } finally {
@@ -374,18 +397,33 @@ export function AccountReconcileDialog({
         }
     };
 
+    const amount = (kop: number) =>
+        new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: account.currency,
+            minimumFractionDigits: kop % 100 === 0 ? 0 : 2,
+        }).format(kop / 100);
+    const stamp = (iso: string) =>
+        new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+            new Date(iso),
+        );
     return (
-        <AppDialog
+        <Tab
             title={`Reconcile ${account.name}`}
+            strip={`Reconcile · ${account.name}`}
+            persistKey="account-reconcile"
+            width={30}
             onClose={onClose}
-            applyText="Reconcile"
-            onApply={() => void apply()}
-            applyLoading={busy}
+            footer={
+                <Button loading={busy} disabled={actualKop == null} onClick={() => void apply()}>
+                    Reconcile
+                </Button>
+            }
         >
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <Txt tone="secondary">Computed balance</Txt>
-                    <span className="num">{money(balance)}</span>
+            <section className="rc-form">
+                <div className="rc-balance">
+                    <span>Computed balance</span>
+                    <strong className="num">{amount(balance)}</strong>
                 </div>
                 <FAmountInput
                     label="Actual bank balance"
@@ -393,13 +431,69 @@ export function AccountReconcileDialog({
                     onChange={setActual}
                     autoFocus
                 />
-                {delta != null && delta !== 0 && (
-                    <Txt tone="secondary" caption>
-                        An adjustment of {money(delta)} will be posted so the account matches your
-                        bank.
-                    </Txt>
+                {delta != null && (
+                    <p className="rc-note">
+                        {delta === 0
+                            ? "Balances match. No adjustment needed."
+                            : `An adjustment of ${amount(delta)} will be posted.`}
+                    </p>
                 )}
-            </div>
-        </AppDialog>
+            </section>
+            <section className="rc-history" aria-label="Reconciliation history">
+                <h3>History</h3>
+                {history === null ? (
+                    <p>Loading reconciliation history…</p>
+                ) : history === "failed" ? (
+                    <p>Could not load reconciliation history.</p>
+                ) : !history.length ? (
+                    <div className="rc-empty">
+                        <strong>No reconciliations recorded.</strong>
+                        <p>Your first balance check will appear here.</p>
+                    </div>
+                ) : (
+                    <>
+                        <p>Last reconciled: {stamp(history[0]!.createdAt)}</p>
+                        <ol aria-label="Recent reconciliations">
+                            {history.map((event) => (
+                                <li key={event.id}>
+                                    <header>
+                                        <span className="rc-status" data-match={event.delta === 0}>
+                                            {event.delta === 0 ? "Matched" : "Adjusted"}
+                                        </span>
+                                        <time dateTime={event.createdAt}>
+                                            {stamp(event.createdAt)}
+                                        </time>
+                                    </header>
+                                    <dl>
+                                        {[
+                                            ["Computed", amount(event.computedBalance)],
+                                            ["Actual", amount(event.actualBalance)],
+                                            [
+                                                "Difference",
+                                                (event.delta > 0 ? "+" : "") + amount(event.delta),
+                                            ],
+                                        ].map(([label, value]) => (
+                                            <div key={label}>
+                                                <dt>{label}</dt>
+                                                <dd>{value}</dd>
+                                            </div>
+                                        ))}
+                                    </dl>
+                                    {event.adjustmentTxId != null && (
+                                        <Link
+                                            onClick={onClose}
+                                            to={`${isDemo() ? "/demo" : ""}/transactions?transactionId=${event.adjustmentTxId}`}
+                                        >
+                                            Adjustment #{event.adjustmentTxId}{" "}
+                                            <span aria-hidden="true">↗</span>
+                                        </Link>
+                                    )}
+                                </li>
+                            ))}
+                        </ol>
+                    </>
+                )}
+            </section>
+        </Tab>
     );
 }

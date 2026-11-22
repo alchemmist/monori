@@ -336,7 +336,11 @@ export default function App({
                         />
                     </Suspense>
                 )}
-                {page === "transactions" && <TransactionsPage />}
+                {page === "transactions" && (
+                    <TransactionsPage
+                        key={new URLSearchParams(location.search).get("transactionId")}
+                    />
+                )}
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
                 {page === "admin" && user?.isAdmin === true && (

@@ -1,6 +1,7 @@
 import type {
     AccountCreate,
     AccountPatch,
+    ReconcileEvent,
     BudgetCell,
     CategoryCreate,
     CategoryPatch,
@@ -245,6 +246,22 @@ export const api = {
         })
             .then(json(okResponseSchema))
             .then(() => undefined),
+    reconcileHistory(id: Id): Promise<ReconcileEvent[]> {
+        return apiFetch(`/api/accounts/${id}/reconciles`).then(
+            json(
+                z.array(
+                    z.object({
+                        id: z.number().int(),
+                        createdAt: z.string(),
+                        actualBalance: z.number().int(),
+                        computedBalance: z.number().int(),
+                        delta: z.number().int(),
+                        adjustmentTxId: z.number().int().nullable(),
+                    }),
+                ),
+            ),
+        );
+    },
     reconcileAccount: (id: Id, actualBalance: number): Promise<{ delta: number }> =>
         apiFetch(`/api/accounts/${id}/reconcile`, {
             method: "POST",

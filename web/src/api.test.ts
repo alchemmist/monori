@@ -64,6 +64,7 @@ const responseFor = (url: string, method?: string): unknown => {
         return { ok: true, refundOfId: 1, categoryId: 2 };
     if (url.endsWith("/refund") && method === "DELETE") return { ok: true, categoryId: 2 };
     if (url === "/api/budgets/bulk") return { set: 1 };
+    if (url === "/api/accounts/1/reconciles") return [];
     if (url === "/api/accounts/1/reconcile") return { delta: 0 };
     if (url === "/api/transfers/suggestions") return { rows: [], transactions: [] };
     if (url === "/api/transfers/detect") return { merged: [], suggested: 0 };
@@ -431,6 +432,13 @@ const ENDPOINTS: Endpoint[] = [
         "POST",
         { email: "a@b.c", password: "pw" },
     ],
+    [
+        "reconcileHistory",
+        () => api.reconcileHistory(1),
+        "/api/accounts/1/reconciles",
+        undefined,
+        undefined,
+    ],
     ["adminOverview", () => api.adminOverview(), "/api/admin/overview", undefined, undefined],
     ["adminUsers", () => api.adminUsers(), "/api/admin/users", undefined, undefined],
     ["adminUserDetail", () => api.adminUserDetail(1), "/api/admin/users/1", undefined, undefined],
@@ -536,6 +544,7 @@ describe("api", () => {
     });
 
     it.each([
+        ["reconcileHistory", () => api.reconcileHistory(1)],
         ["authLogin", () => api.authLogin("a@b.c", "pw")],
         ["authMe", () => api.authMe("token")],
         ["workbookPreview", () => api.workbookPreview(new File(["x"], "book.xlsx"))],

@@ -164,6 +164,18 @@ def test_reconcile_posts_adjustment_for_the_delta(api: Api, client: TestClient) 
 
     again = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 9000})
     assert again.json()["delta"] == 0
+    latest, previous = client.get(f"/api/accounts/{acc}/reconciles").json()
+    assert latest["adjustmentTxId"] is None
+    assert latest["computedBalance"] == latest["actualBalance"] == 9000
+    assert previous["computedBalance"] == 7500
+    assert previous["actualBalance"] == 9000
+    assert previous["delta"] == 1500
+    assert previous["adjustmentTxId"] == adjustment.id
+    assert client.delete(f"/api/transactions/{adjustment.id}").status_code == 200
+    assert client.get(f"/api/accounts/{acc}/reconciles").json()[1] == {
+        **previous,
+        "adjustmentTxId": None,
+    }
 
 
 def test_reconcile_ignores_hidden_transactions(api: Api, client: TestClient) -> None:

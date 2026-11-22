@@ -37,6 +37,7 @@ def test_users_are_isolated(anon: TestClient) -> None:
     assert r.status_code == 200
     cid = r.json()["id"]
     alice_acct = anon.get("/api/accounts", headers=a).json()[0]["id"]
+    assert anon.get(f"/api/accounts/{alice_acct}/reconciles", headers=b).status_code == 404
     r = anon.post(
         "/api/transactions",
         json={"date": "2026-01-05T00:00:00", "amount": -100, "accountId": alice_acct},

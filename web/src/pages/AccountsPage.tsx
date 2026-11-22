@@ -14,7 +14,7 @@ import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { money } from "../format.js";
-import { AccountDeleteDialog, AccountReconcileDialog } from "../components/AccountDialogs.jsx";
+import { AccountDeleteDialog } from "../components/AccountDialogs.jsx";
 import ConnectionDialog from "../components/ConnectionDialog.jsx";
 import "./accounts.css";
 import type { Account, Connection, Id } from "../types.js";
@@ -26,7 +26,7 @@ const TYPE_LABEL: Record<string, string> = {
     other: "Other",
 };
 
-type AccountDialog = { type: "delete" | "reconcile" | "connection"; account: Account };
+type AccountDialog = { type: "delete" | "connection"; account: Account };
 interface AccountDrag {
     fromIndex: number;
     targetIndex: number;
@@ -207,7 +207,11 @@ export default function AccountsPage() {
                                         {
                                             text: "Reconcile",
                                             action: () =>
-                                                setDialog({ type: "reconcile", account: a }),
+                                                openTab(
+                                                    "account-reconcile",
+                                                    { accountId: a.id },
+                                                    `account-reconcile:${a.id}`,
+                                                ),
                                         },
                                         {
                                             text: connByAccount.has(a.id)
@@ -256,13 +260,6 @@ export default function AccountsPage() {
                     account={dialog.account}
                     accounts={accounts}
                     txCount={txCounts.get(dialog.account.id) ?? 0}
-                    onClose={() => setDialog(null)}
-                />
-            )}
-            {dialog?.type === "reconcile" && (
-                <AccountReconcileDialog
-                    account={dialog.account}
-                    balance={balances.get(dialog.account.id) ?? 0}
                     onClose={() => setDialog(null)}
                 />
             )}

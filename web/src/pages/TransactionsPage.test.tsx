@@ -37,8 +37,50 @@ const categories = [
 
 describe("TransactionsPage", () => {
     beforeEach(() => {
+        window.history.replaceState({}, "", "/transactions");
         resetStore();
         vi.clearAllMocks();
+    });
+
+    it.each(["x22", "22x"])("ignores malformed receipt ID %s", (value) => {
+        window.history.pushState({}, "", `/transactions?transactionId=${value}`);
+        try {
+            seed({ accounts, transactions: [tx(22, { description: "Visible entry" })] });
+            renderUI(<TransactionsPage />);
+            expect(screen.getByPlaceholderText("Search description or comment")).toHaveValue("");
+            expect(screen.getByText("Visible entry")).toBeInTheDocument();
+        } finally {
+            window.history.replaceState({}, "", "/");
+        }
+    });
+    it.each(["order#22", "#22x"])(
+        "searches %s as a description rather than an exact ID",
+        (term) => {
+            seed({ accounts, transactions: [tx(1, { description: term })] });
+            renderUI(<TransactionsPage />);
+            fireEvent.change(screen.getByPlaceholderText("Search description or comment"), {
+                target: { value: term },
+            });
+            expect(screen.getByText(term)).toBeInTheDocument();
+        },
+    );
+    it("opens only the transaction referenced by the adjustment link", () => {
+        window.history.pushState({}, "", "/transactions?transactionId=22");
+        try {
+            seed({
+                accounts,
+                transactions: [
+                    tx(1, { description: "Other entry" }),
+                    tx(22, { description: "Linked entry" }),
+                ],
+            });
+            renderUI(<TransactionsPage />);
+            expect(document.querySelector('button[aria-pressed="true"]')).not.toBeNull();
+            expect(screen.getByText("Linked entry")).toBeInTheDocument();
+            expect(screen.queryByText("Other entry")).not.toBeInTheDocument();
+        } finally {
+            window.history.replaceState({}, "", "/");
+        }
     });
 
     it("renders transactions, source tags, totals and progressive loading", () => {

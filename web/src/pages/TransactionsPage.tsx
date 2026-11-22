@@ -64,11 +64,12 @@ export default function TransactionsPage() {
         notify,
     } = useStore();
     if (!snapshot) throw new Error("transactions page requires a loaded snapshot");
-    const [query, setQuery] = useState("");
+    const linkedId = String(new URLSearchParams(window.location.search).get("transactionId"));
+    const [query, setQuery] = useState(/^\d+$/.test(linkedId) ? `#${linkedId}` : "");
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
-    const [showHidden, setShowHidden] = useState(false);
+    const [showHidden, setShowHidden] = useState(query.startsWith("#"));
     const [amountRange, setAmountRange] = useState<[number, number] | null>(null);
 
     // hidden rows are not in the snapshot at all; the first toggle fetches them
@@ -216,6 +217,7 @@ export default function TransactionsPage() {
                     t.categoryId === +catFilter ||
                     (t.splits?.some((part) => part.categoryId === +catFilter) ?? false),
             );
+        if (/^#\d+$/.test(q)) return rows.filter((t) => t.id === Number(q.slice(1)));
         if (q !== "")
             rows = rows.filter(
                 (t) =>

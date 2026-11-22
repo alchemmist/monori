@@ -106,7 +106,8 @@ now). An account's balance is `openingBalance` plus the sum of its transactions.
 | PATCH | `/api/accounts/{id}` | `{name?, type?, icon?, color?, iconImage?, currency?, openingBalance?, openingDate?, archived?}` | Partial update. `iconImage: ""` clears the custom image back to the glyph. |
 | DELETE | `/api/accounts/{id}` | — | Query `?reassignTo=<id>` moves its transactions first. A non-empty account without a target, or the last account, gives `400`. |
 | POST | `/api/accounts/reorder` | `{ids: [...]}` | Must list every account exactly once. |
-| POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | Posts an `adjustment` transaction for `actualBalance − computed balance`. Returns `{delta}` (`0` when already matching). |
+| POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | Posts an `adjustment` transaction for `actualBalance − computed balance`. Records a receipt even for an exact match. Returns `{delta}`. |
+| GET | `/api/accounts/{id}/reconciles` | — | Latest 50 receipts, newest first: `id`, `createdAt` (UTC), `actualBalance`, `computedBalance`, `delta`, nullable `adjustmentTxId`. Amounts in integer kopecks. |
 
 ## Transfers
 

@@ -219,6 +219,42 @@ describe("reconcileAccount in the demo", () => {
         expect(added!.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
     });
 
+    it("keeps the newest 50 receipts and preserves unrelated adjustment links", async () => {
+        const store = useStore.getState();
+        expect(await store.reconcileHistory(1)).toEqual([]);
+        await store.reconcileAccount(1, 200);
+        await store.reconcileAccount(1, 210);
+        const [latest, earlier] = await store.reconcileHistory(1);
+        expect(earlier!.id).toBe(1);
+        expect(latest!.id).toBe(earlier!.id + 1);
+        expect(latest!.adjustmentTxId).not.toBeNull();
+        expect(earlier!.adjustmentTxId).not.toBeNull();
+        await store.deleteTransaction(earlier!.adjustmentTxId!);
+        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([
+            latest!.adjustmentTxId,
+            null,
+        ]);
+        for (let i = 0; i < 50; i++) await store.reconcileAccount(1, 160);
+        const rows = await store.reconcileHistory(1);
+        expect(rows.map((r) => r.id)).toEqual(
+            Array.from({ length: 50 }, (_, i) => latest!.id + 50 - i),
+        );
+    });
+
+    it("does not relink a deleted adjustment when a demo ID is reused", async () => {
+        const store = useStore.getState();
+        await store.reconcileAccount(1, 200);
+        await store.reconcileAccount(1, 200);
+        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([null, 8]);
+        await store.deleteTransaction(8);
+        await store.reconcileAccount(1, 190);
+        expect((await store.reconcileHistory(1)).map((r) => r.adjustmentTxId)).toEqual([
+            8,
+            null,
+            null,
+        ]);
+    });
+
     it("adds nothing when the balance already matches", async () => {
         const result = await useStore.getState().reconcileAccount(1, 150);
         expect(result).toEqual({ delta: 0 });

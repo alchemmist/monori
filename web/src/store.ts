@@ -8,6 +8,7 @@ import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 import type {
     AccountCreate,
     AccountPatch,
+    ReconcileEvent,
     BudgetCell,
     CategoryCreate,
     CategoryPatch,
@@ -85,6 +86,7 @@ interface StoreState {
     createAccount: (body: AccountCreate) => Promise<Id>;
     patchAccount: (id: Id, patch: AccountPatch) => Promise<void>;
     deleteAccount: (id: Id, reassignTo?: Id | null) => Promise<void>;
+    reconcileHistory: (id: Id) => Promise<ReconcileEvent[]>;
     reconcileAccount: (id: Id, actualBalance: number) => Promise<{ delta: number }>;
     createTransfer: (body: TransferCreate) => Promise<string>;
     linkTransfer: (outTxId: Id, inTxId: Id) => Promise<string>;
@@ -925,6 +927,18 @@ export const useStore = create<StoreState>((set, get) => ({
         set((state) => ({
             snapshot: {
                 ...snapshot,
+                ...(snapshot.demoReconciles && {
+                    demoReconciles: Object.fromEntries(
+                        Object.entries(snapshot.demoReconciles).map(([id, events]) => [
+                            id,
+                            events.map((event) =>
+                                event.adjustmentTxId === txId
+                                    ? { ...event, adjustmentTxId: null }
+                                    : event,
+                            ),
+                        ]),
+                    ),
+                }),
                 transactions: removeRelationships(snapshot.transactions),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
@@ -1164,6 +1178,12 @@ export const useStore = create<StoreState>((set, get) => ({
         });
     },
 
+    async reconcileHistory(id) {
+        if (!isDemo()) return api.reconcileHistory(id);
+        const snapshot = requireSnapshot(get().snapshot);
+        return snapshot.demoReconciles?.[id] ?? [];
+    },
+
     async reconcileAccount(id, actualBalance) {
         if (isDemo()) {
             const snapshot = requireSnapshot(get().snapshot);
@@ -1177,6 +1197,8 @@ export const useStore = create<StoreState>((set, get) => ({
                       )
                 : 0;
             const delta = actualBalance - balance;
+            let transactions = snapshot.transactions;
+            let adjustmentTxId: Id | null = null;
             if (delta !== 0) {
                 const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
                 const tx = {
@@ -1192,8 +1214,28 @@ export const useStore = create<StoreState>((set, get) => ({
                     comment: "",
                     source: "adjustment",
                 };
-                set({ snapshot: { ...snapshot, transactions: [...snapshot.transactions, tx] } });
+                transactions = [...transactions, tx];
+                adjustmentTxId = nextId;
             }
+            const history = snapshot.demoReconciles?.[id] ?? [];
+            const event = {
+                id: (history[0]?.id ?? 0) + 1,
+                createdAt: new Date().toISOString(),
+                computedBalance: balance,
+                actualBalance,
+                delta,
+                adjustmentTxId,
+            };
+            set({
+                snapshot: {
+                    ...snapshot,
+                    transactions,
+                    demoReconciles: {
+                        ...snapshot.demoReconciles,
+                        [id]: [event, ...history].slice(0, 50),
+                    },
+                },
+            });
             return { delta };
         }
         const res = await api.reconcileAccount(id, actualBalance);
