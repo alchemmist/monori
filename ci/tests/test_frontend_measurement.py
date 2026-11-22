@@ -1188,9 +1188,9 @@ def test_measurement_loader_uses_the_collector_artifact_paths(
 def test_command_initializes_plain_info_logging(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[dict[str, object]] = []
+    calls: list[dict[str, str | int]] = []
 
-    def configure(**kwargs: object) -> None:
+    def configure(**kwargs: str | int) -> None:
         calls.append(kwargs)
 
     monkeypatch.setattr(logging, "basicConfig", configure)

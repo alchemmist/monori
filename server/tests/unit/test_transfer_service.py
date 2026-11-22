@@ -43,19 +43,24 @@ def ledger() -> Iterator[sqlite3.Connection]:
         c.close()
 
 
-def add_tx(  # noqa: PLR0913
+def add_tx(
     c: sqlite3.Connection,
     tx_id: int,
     amount: int,
     account: int,
-    date: str = "2026-03-10T09:00:00",
-    *,
-    description: str = "",
+    **details: str,
 ) -> int:
     c.execute(
         "INSERT INTO transactions (id, amount, account_id, date, description, hash)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (tx_id, amount, account, date, description, f"hash-{tx_id}"),
+        (
+            tx_id,
+            amount,
+            account,
+            details.get("date", "2026-03-10T09:00:00"),
+            details.get("description", ""),
+            f"hash-{tx_id}",
+        ),
     )
     return tx_id
 
@@ -318,7 +323,7 @@ def test_candidates_honor_day_window_and_preserve_description_hints(
     ledger: sqlite3.Connection,
 ) -> None:
     add_tx(ledger, 101, -5000, 11, description="transfer")
-    add_tx(ledger, 102, 5000, 12, "2026-03-15T23:00:00", description="transfer")
+    add_tx(ledger, 102, 5000, 12, date="2026-03-15T23:00:00", description="transfer")
     expected = TransferCandidate(101, 102, 5000, 5, hint=True)
     assert service.candidates(ledger, 1) == [expected]
     assert service.candidates(ledger, 1, max_days=4) == []
@@ -333,9 +338,9 @@ def test_detect_merges_confident_pairs_and_returns_exact_metadata(
     ledger: sqlite3.Connection,
 ) -> None:
     add_tx(ledger, 101, -5000, 11, description="transfer")
-    add_tx(ledger, 102, 5000, 12, "2026-03-11", description="transfer")
+    add_tx(ledger, 102, 5000, 12, date="2026-03-11", description="transfer")
     add_tx(ledger, 103, -7000, 11)
-    add_tx(ledger, 104, 7000, 12, "2026-03-13")
+    add_tx(ledger, 104, 7000, 12, date="2026-03-13")
     add_tx(ledger, 105, -9000, 11, description="shop")
     add_tx(ledger, 106, 9000, 12, description="transfer")
 

@@ -506,7 +506,7 @@ def test_year_summaries_read_localized_labels_and_preserve_zero_seeds() -> None:
     for base in (2, 6, 10):
         for offset, label in enumerate(("Budgeted", "Outflows", "Balance")):
             ws.cell(8, base + offset, label)
-    ws.cell(6, 4, "Не заложено в декабре")  # noqa: RUF001
+    ws.cell(6, 4, "Not budgeted in December")
     ws.cell(6, 3, 0)
     ws.cell(3, 8, "Not budgeted in January")
     ws.cell(3, 7, 12.34)

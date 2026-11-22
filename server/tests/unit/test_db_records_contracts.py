@@ -90,8 +90,8 @@ def make_row(request: pytest.FixtureRequest) -> Callable[[dict[str, Cell]], Data
 @pytest.mark.parametrize("reader", [db_int, db_optional_int])
 @pytest.mark.parametrize("value", [True, False, 1.0, "1", b"1"])
 def test_integer_values_reject_coercion(
-    reader: Callable[[object, str], int | None],
-    value: object,
+    reader: Callable[[Cell, str], int | None],
+    value: Cell,
 ) -> None:
     message = f"SQL column 'amount' must be an int, got {type(value).__name__}"
     with pytest.raises(RowTypeError, match=f"^{re.escape(message)}$"):
@@ -101,8 +101,8 @@ def test_integer_values_reject_coercion(
 @pytest.mark.parametrize("reader", [db_str, db_optional_str])
 @pytest.mark.parametrize("value", [1, False, b"text", 1.0])
 def test_text_values_reject_coercion(
-    reader: Callable[[object, str], str | None],
-    value: object,
+    reader: Callable[[Cell, str], str | None],
+    value: Cell,
 ) -> None:
     message = f"SQL column 'description' must be a str, got {type(value).__name__}"
     with pytest.raises(RowTypeError, match=f"^{re.escape(message)}$"):
@@ -114,7 +114,7 @@ def test_text_values_reject_coercion(
     [(db_int, "an int"), (db_str, "a str")],
 )
 def test_required_values_reject_null_with_default_context(
-    reader: Callable[[object], object],
+    reader: Callable[[None], int | str],
     expected: str,
 ) -> None:
     with pytest.raises(
@@ -156,7 +156,7 @@ def test_nullable_values_accept_only_explicit_null(
 @pytest.mark.parametrize("reader", [row_int, row_str, row_optional_int, row_optional_str, row_bool])
 def test_missing_columns_report_the_key_and_chain_the_lookup_error(
     make_row: Callable[[dict[str, Cell]], DatabaseRow],
-    reader: Callable[[DatabaseRow, str], object],
+    reader: Callable[[DatabaseRow, str], int | str | None],
 ) -> None:
     with pytest.raises(
         RowValueError, match=r"^SQL row is missing required column 'absent'$"
