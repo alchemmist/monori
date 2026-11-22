@@ -33,7 +33,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -61,7 +61,7 @@ jobs:
       QG_OPERATION_ID: release-accept
       QG_NODE_ID: accept
       QG_NODE_TITLE: Release Accept (accept)
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   build:
     name: Release Build (build)
     runs-on: ubuntu-latest
@@ -90,7 +90,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -120,7 +120,7 @@ jobs:
       QG_OPERATION_ID: release-build
       QG_NODE_ID: build
       QG_NODE_TITLE: Release Build (build)
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   publish:
     name: Release Publish (publish)
     runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -194,7 +194,7 @@ jobs:
       QG_OPERATION_ID: release-publish
       QG_NODE_ID: publish
       QG_NODE_TITLE: Release Publish (publish)
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   promote:
     name: Release Promote (promote)
     runs-on: ubuntu-latest
@@ -205,8 +205,11 @@ jobs:
         with:
           name: release-manifest-${{ github.sha }}
           path: ${{ runner.temp }}/release-manifest
-      - run: echo "RELEASE_IMAGES=$(jq -ce . "$RUNNER_TEMP/release-manifest/images.json")"
-          >> "$GITHUB_ENV"
+      - run: 'images=$(jq -ce ''select(keys == ["back","front","sync"])'' "$RUNNER_TEMP/release-manifest/images.json")
+
+          echo "RELEASE_IMAGES=$images" >> "$GITHUB_ENV"
+
+          '
       - uses: alchemmist/deploy-to-socrat@881b4d9513ed3cd140926201118770c29ed68597
         with:
           images: ${{ env.RELEASE_IMAGES }}
@@ -222,7 +225,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -252,4 +255,4 @@ jobs:
       QG_OPERATION_ID: release-promote
       QG_NODE_ID: promote
       QG_NODE_TITLE: Release Promote (promote)
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc

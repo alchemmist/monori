@@ -250,7 +250,9 @@ operations:
               with:
                   name: release-manifest-${{ github.sha }}
                   path: ${{ runner.temp }}/release-manifest
-            - run: echo "RELEASE_IMAGES=$(jq -ce . "$RUNNER_TEMP/release-manifest/images.json")" >> "$GITHUB_ENV"
+            - run: |
+                  images=$(jq -ce 'select(keys == ["back","front","sync"])' "$RUNNER_TEMP/release-manifest/images.json")
+                  echo "RELEASE_IMAGES=$images" >> "$GITHUB_ENV"
             - uses: alchemmist/deploy-to-socrat@881b4d9513ed3cd140926201118770c29ed68597
               with:
                   images: ${{ env.RELEASE_IMAGES }}

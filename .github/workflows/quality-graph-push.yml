@@ -59,7 +59,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -85,7 +85,7 @@ jobs:
       QG_OPERATION_ID: workflow-graph
       QG_NODE_ID: workflow-graph
       QG_NODE_TITLE: Workflow graph validation
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   fmt-check:
     name: Format check
     runs-on: ubuntu-latest
@@ -134,7 +134,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -160,7 +160,7 @@ jobs:
       QG_OPERATION_ID: fmt-check
       QG_NODE_ID: fmt-check
       QG_NODE_TITLE: Format check
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   triple-quotes:
     name: Triple-quoted string style
     runs-on: ubuntu-latest
@@ -211,7 +211,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -238,7 +238,7 @@ jobs:
       QG_OPERATION_ID: triple-quotes
       QG_NODE_ID: triple-quotes
       QG_NODE_TITLE: Triple-quoted string style
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   suppressions:
     name: Lint suppression gate
     runs-on: ubuntu-latest
@@ -289,7 +289,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -316,7 +316,7 @@ jobs:
       QG_OPERATION_ID: suppressions
       QG_NODE_ID: suppressions
       QG_NODE_TITLE: Lint suppression gate
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   hardcoded-colors:
     name: Hardcoded color gate
     runs-on: ubuntu-latest
@@ -369,7 +369,7 @@ jobs:
           adapter: native
           report-path: reports/hardcoded-colors.json
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -398,7 +398,7 @@ jobs:
       QG_OPERATION_ID: hardcoded-colors
       QG_NODE_ID: hardcoded-colors
       QG_NODE_TITLE: Hardcoded color gate
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   docs-links:
     name: Documentation links
     runs-on: ubuntu-latest
@@ -449,7 +449,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -475,7 +475,7 @@ jobs:
       QG_OPERATION_ID: docs-links
       QG_NODE_ID: docs-links
       QG_NODE_TITLE: Documentation links
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -526,7 +526,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -552,7 +552,7 @@ jobs:
       QG_OPERATION_ID: lint
       QG_NODE_ID: lint
       QG_NODE_TITLE: Lint
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   object-annotations:
     name: Python object annotation gate
     runs-on: ubuntu-latest
@@ -603,7 +603,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -630,7 +630,7 @@ jobs:
       QG_OPERATION_ID: object-annotations
       QG_NODE_ID: object-annotations
       QG_NODE_TITLE: Python object annotation gate
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   type-casts:
     name: Unsafe type cast gate
     runs-on: ubuntu-latest
@@ -679,7 +679,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -705,7 +705,7 @@ jobs:
       QG_OPERATION_ID: type-casts
       QG_NODE_ID: type-casts
       QG_NODE_TITLE: Unsafe type cast gate
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   type:
     name: Type check
     runs-on: ubuntu-latest
@@ -754,7 +754,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -780,7 +780,7 @@ jobs:
       QG_OPERATION_ID: type
       QG_NODE_ID: type
       QG_NODE_TITLE: Type check
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   analyze:
     name: Static analysis
     runs-on: ubuntu-latest
@@ -830,7 +830,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -856,7 +856,7 @@ jobs:
       QG_OPERATION_ID: analyze
       QG_NODE_ID: analyze
       QG_NODE_TITLE: Static analysis
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   time-bombs:
     name: Time bomb guardrail
     runs-on: ubuntu-latest
@@ -907,7 +907,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -934,7 +934,7 @@ jobs:
       QG_OPERATION_ID: time-bombs
       QG_NODE_ID: time-bombs
       QG_NODE_TITLE: Time bomb guardrail
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   test-fast:
     name: Fast tests
     runs-on: ubuntu-latest
@@ -983,7 +983,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1009,7 +1009,7 @@ jobs:
       QG_OPERATION_ID: test-fast
       QG_NODE_ID: test-fast
       QG_NODE_TITLE: Fast tests
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   test-medium:
     name: Medium tests
     runs-on: ubuntu-latest
@@ -1058,7 +1058,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1084,7 +1084,7 @@ jobs:
       QG_OPERATION_ID: test-medium
       QG_NODE_ID: test-medium
       QG_NODE_TITLE: Medium tests
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   test-slow:
     name: Slow tests
     runs-on: ubuntu-latest
@@ -1135,7 +1135,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1161,7 +1161,7 @@ jobs:
       QG_OPERATION_ID: test-slow
       QG_NODE_ID: test-slow
       QG_NODE_TITLE: Slow tests
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   flaky-tests:
     name: Flaky test detection
     runs-on: ubuntu-latest
@@ -1212,7 +1212,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1239,7 +1239,7 @@ jobs:
       QG_OPERATION_ID: flaky-tests
       QG_NODE_ID: flaky-tests
       QG_NODE_TITLE: Flaky test detection
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
     timeout-minutes: 180
   build:
     name: Build frontend
@@ -1289,7 +1289,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1315,7 +1315,7 @@ jobs:
       QG_OPERATION_ID: build
       QG_NODE_ID: build
       QG_NODE_TITLE: Build frontend
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
@@ -1366,7 +1366,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1393,7 +1393,7 @@ jobs:
       QG_OPERATION_ID: coverage
       QG_NODE_ID: coverage
       QG_NODE_TITLE: Coverage
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   mutation:
     name: Mutation testing
     runs-on: ubuntu-latest
@@ -1444,7 +1444,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1471,7 +1471,7 @@ jobs:
       QG_OPERATION_ID: mutation
       QG_NODE_ID: mutation
       QG_NODE_TITLE: Mutation testing
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
     timeout-minutes: 360
   bundle-size:
     name: Frontend bundle size
@@ -1525,7 +1525,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1554,7 +1554,7 @@ jobs:
       QG_OPERATION_ID: bundle-size
       QG_NODE_ID: bundle-size
       QG_NODE_TITLE: Frontend bundle size
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
   frontend-performance:
     name: Frontend performance regression
     runs-on: ubuntu-latest
@@ -1607,7 +1607,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1634,7 +1634,7 @@ jobs:
       QG_OPERATION_ID: frontend-performance
       QG_NODE_ID: frontend-performance
       QG_NODE_TITLE: Frontend performance regression
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
     timeout-minutes: 90
   audit:
     name: Dependency and security audit
@@ -1684,7 +1684,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -1710,4 +1710,4 @@ jobs:
       QG_OPERATION_ID: audit
       QG_NODE_ID: audit
       QG_NODE_TITLE: Dependency and security audit
-      QG_GRAPH_DIGEST: 8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c
+      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc

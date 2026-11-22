@@ -14,12 +14,18 @@ if [[ ${2:-} == --rehearse-local ]]; then
 fi
 manifest='{}'
 for component in front back sync; do
+  digest=''
   for repo in "${repos[@]}"; do
     skopeo copy "${dest_flags[@]}" --all --preserve-digests --digestfile "$out/$component.digest" \
       "oci-archive:$out/$component.tar" "docker://$repo:$component-$GITHUB_SHA"
+    published=$(cat "$out/$component.digest")
+    [[ $published =~ ^sha256:[0-9a-f]{64}$ ]]
+    if [[ -n $digest && $digest != "$published" ]]; then
+      echo "Registry digest mismatch for $component" >&2
+      exit 1
+    fi
+    digest=$published
   done
-  digest=$(cat "$out/$component.digest")
-  [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
   manifest=$(jq -c --arg key "$component" --arg value "$digest" '. + {($key): $value}' <<<"$manifest")
 done
 printf '%s\n' "$manifest" >"$out/images.json"

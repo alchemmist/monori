@@ -386,7 +386,7 @@
       "trigger": "pull-request"
     }
   },
-  "graphDigest": "8b87380b11dcedfdae8d1cefaa221706b6aa77f86151363da8c2b8fb5aed755c",
+  "graphDigest": "129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -865,7 +865,7 @@
           }
         },
         {
-          "run": "echo \"RELEASE_IMAGES=$(jq -ce . \"$RUNNER_TEMP/release-manifest/images.json\")\" >> \"$GITHUB_ENV\""
+          "run": "images=$(jq -ce 'select(keys == [\"back\",\"front\",\"sync\"])' \"$RUNNER_TEMP/release-manifest/images.json\")\necho \"RELEASE_IMAGES=$images\" >> \"$GITHUB_ENV\"\n"
         },
         {
           "uses": "alchemmist/deploy-to-socrat@881b4d9513ed3cd140926201118770c29ed68597",
