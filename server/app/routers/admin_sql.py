@@ -25,6 +25,7 @@ from monori.server.app.admin import admin_user
 from monori.server.app.auth import AuthenticatedUser
 from monori.server.app.db import DatabaseConnection
 from monori.server.app.deps import conn
+from monori.server.app.pg_console import ConsoleRuntime
 from monori.server.app.pg_console import run as run_pg_console
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -136,14 +137,16 @@ def run_sql(
         return run_pg_console(
             body,
             admin.id,
-            statement_max_chars=STATEMENT_MAX_CHARS,
-            query_timeout_s=QUERY_TIMEOUT_S,
-            row_limit=ROW_LIMIT,
-            cell=cell,
+            ConsoleRuntime(
+                statement_max_chars=STATEMENT_MAX_CHARS,
+                query_timeout_s=QUERY_TIMEOUT_S,
+                row_limit=ROW_LIMIT,
+                cell=cell,
+                response=SqlResponse,
+                dry_response=SqlDryResponse,
+            ),
             audit=_audit,
             conn=conn,
-            response=SqlResponse,
-            dry_response=SqlDryResponse,
         )
     uid = admin.id
     sql = body.sql.strip()

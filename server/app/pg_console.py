@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import time
 from contextlib import closing
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 import psycopg
@@ -16,7 +17,7 @@ from pglast.stream import RawStream
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
-    from typing import Protocol
+    from typing import Protocol, TypedDict, Unpack
 
     from monori.server.app.db import DatabaseConnection
     from monori.server.app.routers.admin_sql import (
@@ -47,6 +48,38 @@ if TYPE_CHECKING:
 
     class _RawStream(Protocol):
         def __call__(self, node: _RawNode) -> str: ...
+
+    class _ResponseArgs(TypedDict):
+        kind: str
+        columns: list[str]
+        rows: list[list[SqlCell]]
+        truncated: bool
+        row_count: int
+        elapsed_ms: float
+
+    class _DryResponseArgs(_ResponseArgs):
+        would_write: bool
+
+    class _ResponseFactory(Protocol):
+        def __call__(self, **kwargs: Unpack[_ResponseArgs]) -> SqlResponse: ...
+
+    class _DryResponseFactory(Protocol):
+        def __call__(self, **kwargs: Unpack[_DryResponseArgs]) -> SqlDryResponse: ...
+
+    class _CellFactory(Protocol):
+        def __call__(self, value: SqliteValue) -> SqlCell: ...
+
+
+@dataclass(frozen=True)
+class ConsoleRuntime:
+    """Configuration and typed model factories for the PostgreSQL console."""
+
+    statement_max_chars: int
+    query_timeout_s: float
+    row_limit: int
+    cell: _CellFactory
+    response: _ResponseFactory
+    dry_response: _DryResponseFactory
 
 
 TABLES = {
@@ -323,92 +356,101 @@ def plan(statement: str, scratch: set[str]) -> tuple[bool, str]:
     return kind != "SelectStmt", normalized_sql
 
 
-def run(  # noqa: PLR0913, PLR0915
+@dataclass(frozen=True)
+class _Execution:
+    write: bool
+    columns: list[str]
+    rows: list[list[SqlCell]]
+    truncated: bool
+    count: int
+
+
+def _execute_statement(
+    db: psycopg.Connection, statement: str, runtime: ConsoleRuntime
+) -> _Execution:
+    """Plan and execute one statement within its transaction."""
+    db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
+    timeout = (str(max(1, int(runtime.query_timeout_s * 1000))),)
+    db.execute("SELECT set_config('statement_timeout',%s,true)", timeout)
+    db.execute("SET LOCAL lock_timeout='2s'")
+    scratch = {
+        name
+        for (name,) in db.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname='console_scratch'"
+        )
+    }
+    write, sql = plan(statement, scratch)
+    if not write:
+        db.rollback()
+        db.execute("SET TRANSACTION READ ONLY")
+        db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
+        db.execute("SELECT set_config('statement_timeout',%s,true)", timeout)
+    if write:
+        db.execute("SELECT pg_advisory_xact_lock(1297043023)")
+        if "returning" in sql.lower():
+            message = "Use a separate SELECT to view updated rows"
+            raise ValueError(message)
+        count = max(0, db.execute(sql).rowcount)
+        return _Execution(write, [], [], truncated=False, count=count)
+    cur = db.cursor(name="monori_result")
+    cur.execute(sql)
+    columns = [description.name for description in cur.description or ()]
+    values = cur.fetchmany(runtime.row_limit + 1)
+    rows = [[runtime.cell(value) for value in row] for row in values[: runtime.row_limit]]
+    cur.close()
+    return _Execution(write, columns, rows, len(values) > runtime.row_limit, len(rows))
+
+
+def run(
     body: _Body,
     uid: int,
-    *,
-    statement_max_chars: int,
-    query_timeout_s: float,
-    row_limit: int,
-    cell: Callable[[SqliteValue], SqlCell],
+    runtime: ConsoleRuntime,
     audit: Callable[[DatabaseConnection, int, str, str], None],
     conn: Callable[[], DatabaseConnection],
-    response: Callable[..., SqlResponse],
-    dry_response: Callable[..., SqlDryResponse],
 ) -> SqlResponse | SqlDryResponse:
     """Run a console statement and record its audit outcome."""
     statement = body.sql.strip()
     started = time.monotonic()
     event = "admin_sql_failed"
-    if not statement or len(statement) > statement_max_chars:
+    if not statement or len(statement) > runtime.statement_max_chars:
         raise HTTPException(400, "Invalid SQL length")
     url = os.getenv("MONORI_CONSOLE_DATABASE_URL")
     if not url:
         raise HTTPException(503, "Console credential missing")
     try:
         with psycopg.connect(url, connect_timeout=4) as db:
-            db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
-            db.execute(
-                "SELECT set_config('statement_timeout',%s,true)",
-                (str(max(1, int(query_timeout_s * 1000))),),
-            )
-            db.execute("SET LOCAL lock_timeout='2s'")
-            scratch = {
-                v
-                for (v,) in db.execute(
-                    "SELECT tablename FROM pg_tables WHERE schemaname='console_scratch'"
-                )
-            }
-            write, sql = plan(statement, scratch)
-            if not write:
-                db.rollback()
-                db.execute("SET TRANSACTION READ ONLY")
-                db.execute("SET LOCAL search_path = pg_catalog, public, console_scratch")
-                db.execute(
-                    "SELECT set_config('statement_timeout',%s,true)",
-                    (str(max(1, int(query_timeout_s * 1000))),),
-                )
-            if write:
-                db.execute("SELECT pg_advisory_xact_lock(1297043023)")
-                if "returning" in sql.lower():
-                    raise ValueError(  # noqa: TRY003, TRY301
-                        "Use a separate SELECT to view updated rows"  # noqa: EM101
-                    )
-                cur = db.execute(sql)
-                count = max(0, cur.rowcount)
-                columns = []
-                rows = []
-                truncated = False
-            else:
-                cur = db.cursor(name="monori_result")
-                cur.execute(sql)
-                description = cur.description
-                columns = [d.name for d in description] if description is not None else []
-                values = cur.fetchmany(row_limit + 1)
-                rows = [[cell(v) for v in row] for row in values[:row_limit]]
-                truncated = len(values) > row_limit
-                count = len(rows)
-                cur.close()
-            args = {
-                "columns": columns,
-                "rows": rows,
-                "truncated": truncated,
-                "row_count": count,
-                "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
-            }
+            result = _execute_statement(db, statement, runtime)
+            elapsed_ms = round((time.monotonic() - started) * 1000, 1)
             if body.dry_run:
                 db.rollback()
                 event = "admin_sql_dry_run"
-                return dry_response(kind="dry", would_write=write, **args)
-            if write and not body.confirm_write:
+                return runtime.dry_response(
+                    kind="dry",
+                    would_write=result.write,
+                    columns=result.columns,
+                    rows=result.rows,
+                    truncated=result.truncated,
+                    row_count=result.count,
+                    elapsed_ms=elapsed_ms,
+                )
+            if result.write and not body.confirm_write:
                 db.rollback()
                 event = "admin_sql_rejected"
                 raise HTTPException(
-                    400, f"write statement needs confirmation; it would have affected {count} rows"
+                    400,
+                    "write statement needs confirmation; "
+                    f"it would have affected {result.count} rows",
                 )
             db.commit()
             event = "admin_sql"
-            return response(kind="write" if write else "read", **args)
+            return runtime.response(
+                kind="write" if result.write else "read",
+                columns=result.columns,
+                rows=result.rows,
+                truncated=result.truncated,
+                row_count=result.count,
+                elapsed_ms=elapsed_ms,
+            )
     except psycopg.errors.QueryCanceled as exc:
         raise HTTPException(400, "interrupted: statement timeout") from exc
     except (ValueError, ParseError, psycopg.Error) as exc:
