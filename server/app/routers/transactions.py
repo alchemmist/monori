@@ -1,16 +1,25 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-import sqlite3
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from monori.server.app import db as dbmod
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.db import begin_write
-from monori.server.app.db_records import CategorySignRecord, TransactionRecord
+from monori.server.app.db_records import (
+    CategorySignRecord,
+    TransactionRecord,
+    db_int,
+    row_int,
+    row_str,
+)
+
+if TYPE_CHECKING:
+    from monori.server.app.db_types import DatabaseConnection, DatabaseCursor
 from monori.server.app.deps import (
     IdResponse,
     SplitResponse,
@@ -135,7 +144,7 @@ def _validate_category_type(transaction_sign: int, amount: int) -> None:
 
 
 def _resolve_category(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     category_id: int | None,
     uid: int,
     amount: int | None = None,
@@ -157,7 +166,7 @@ def _resolve_category(
     return category_id
 
 
-def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
+def _resolve_account(c: dbmod.DatabaseConnection, account_id: int, uid: int) -> int:
     if not c.execute(
         "SELECT id FROM accounts WHERE id=? AND user_id=?",
         (account_id, uid),
@@ -203,15 +212,17 @@ def list_transactions(
               AND (:acct IS NULL OR account_id = :acct)
               AND (:q IS NULL OR LOWER(description) LIKE :q)
         """
-        total = c.execute("SELECT COUNT(*)" + where, params).fetchone()[0]
+        count_row = c.execute("SELECT COUNT(*)" + where, params).fetchone()
+        if count_row is None:
+            msg = "transaction count query returned no row"
+            raise RuntimeError(msg)
+        total = db_int(count_row[0], "transaction count")
         rows = c.execute(
             "SELECT *" + where + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset",
             params,
         )
-        if not isinstance(total, int):
-            msg = "transaction count must be an integer"
-            raise TypeError(msg)
-        return TransactionListResponse(total=total, rows=serialize_transactions(c.cursor(), rows))
+        cursor = cast("DatabaseCursor", c.cursor())
+        return TransactionListResponse(total=total, rows=serialize_transactions(cursor, rows))
     finally:
         c.close()
 
@@ -271,13 +282,15 @@ def patch_transaction(
         transaction = TransactionRecord.from_row(row)
         date = patch.date if patch.date is not None else transaction.date
         amount = patch.amount if patch.amount is not None else transaction.amount
-        split_total = c.execute(
+        split_row = c.execute(
             "SELECT SUM(amount) FROM splits WHERE transaction_id=?",
             (tx_id,),
-        ).fetchone()[0]
-        if split_total is not None and not isinstance(split_total, int):
-            msg = "split total must be an integer"
+        ).fetchone()
+        if split_row is None:
+            msg = "split total query returned no row"
             raise RuntimeError(msg)
+        split_value = split_row[0]
+        split_total = None if split_value is None else db_int(split_value, "split total")
         if split_total is not None and amount != split_total:
             raise HTTPException(400, "edit the split parts before changing the total amount")
         description = (
@@ -344,7 +357,7 @@ def replace_splits(
         c.close()
 
 
-def _split_parent(c: sqlite3.Connection, tx_id: int, uid: int) -> TransactionRecord:
+def _split_parent(c: dbmod.DatabaseConnection, tx_id: int, uid: int) -> TransactionRecord:
     row = c.execute(
         "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
         " WHERE t.id=? AND a.user_id=?",
@@ -359,7 +372,7 @@ def _split_parent(c: sqlite3.Connection, tx_id: int, uid: int) -> TransactionRec
 
 
 def _validate_split_parts(
-    c: sqlite3.Connection,
+    c: dbmod.DatabaseConnection,
     transaction: TransactionRecord,
     parts: list[SplitPart],
     uid: int,
@@ -378,7 +391,7 @@ def _validate_split_parts(
         _resolve_category(c, part.category_id, uid, part.amount)
 
 
-def _replace_split_rows(c: sqlite3.Connection, tx_id: int, parts: list[SplitPart]) -> None:
+def _replace_split_rows(c: dbmod.DatabaseConnection, tx_id: int, parts: list[SplitPart]) -> None:
     c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
     for sort, part in enumerate(parts):
         c.execute(
@@ -390,7 +403,7 @@ def _replace_split_rows(c: sqlite3.Connection, tx_id: int, parts: list[SplitPart
         c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
 
 
-def _serialized_splits(c: sqlite3.Connection, tx_id: int) -> list[SplitResponse]:
+def _serialized_splits(c: dbmod.DatabaseConnection, tx_id: int) -> list[SplitResponse]:
     rows = c.execute(
         "SELECT id, category_id, amount, comment FROM splits"
         " WHERE transaction_id=? ORDER BY sort, id",
@@ -398,10 +411,10 @@ def _serialized_splits(c: sqlite3.Connection, tx_id: int) -> list[SplitResponse]
     )
     return [
         SplitResponse(
-            id=row["id"],
-            category_id=row["category_id"],
-            amount=row["amount"],
-            comment=row["comment"],
+            id=row_int(row, "id"),
+            category_id=row_int(row, "category_id"),
+            amount=row_int(row, "amount"),
+            comment=row_str(row, "comment"),
         )
         for row in rows
     ]
@@ -416,7 +429,7 @@ def delete_transaction(
     uid = user.id
     c = conn()
     try:
-        detach_leg(c, uid, tx_id)
+        detach_leg(cast("DatabaseConnection", c), uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -445,7 +458,7 @@ def bulk_transactions(
         affected = 0
         if body.action == "delete":
             for tx_id in body.ids:
-                detach_leg(c, uid, tx_id)
+                detach_leg(cast("DatabaseConnection", c), uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -462,10 +475,10 @@ def bulk_transactions(
                     " WHERE t.id=? AND a.user_id=?",
                     (tx_id, uid),
                 ).fetchone()
-                if row is not None and row["is_split"]:
+                if row is not None and db_int(row["is_split"], "is_split"):
                     raise HTTPException(400, "remove the split before categorizing the parent")
                 if row is not None and category is not None:
-                    _resolve_category(c, category, uid, row["amount"])
+                    _resolve_category(c, category, uid, row_int(row, "amount"))
             for tx_id in body.ids:
                 affected += c.execute(
                     "UPDATE transactions SET category_id=? WHERE id=?"
