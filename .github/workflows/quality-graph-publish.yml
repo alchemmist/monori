@@ -29,7 +29,7 @@ jobs:
       pull-requests: write  # Create and update the dashboard and apply labels on PRs.
     steps:
       - name: Publish trusted Quality Graph state
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: ${{ github.event.action == 'completed' && 'publish' || 'watch' }}
   command:
@@ -43,6 +43,6 @@ jobs:
       pull-requests: write  # Write command feedback and the approval ledger on PRs.
     steps:
       - name: Handle trusted Quality Graph command
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: command

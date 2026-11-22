@@ -4,8 +4,8 @@ provider:
     configuration:
         default-branch: main
         runtime:
-            action: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
-            publisher-action: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+            action: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
+            publisher-action: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
 administration:
     roles: [admin, maintain, write]
 labels:

@@ -25,7 +25,7 @@ jobs:
       - name: Collect Release Accept (accept) result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: collect
           node-id: accept
@@ -33,7 +33,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+          graph-digest: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -61,7 +61,7 @@ jobs:
       QG_OPERATION_ID: release-accept
       QG_NODE_ID: accept
       QG_NODE_TITLE: Release Accept (accept)
-      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+      QG_GRAPH_DIGEST: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
   build:
     name: Release Build (build)
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
       - name: Collect Release Build (build) result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: collect
           node-id: build
@@ -90,7 +90,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+          graph-digest: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -120,7 +120,7 @@ jobs:
       QG_OPERATION_ID: release-build
       QG_NODE_ID: build
       QG_NODE_TITLE: Release Build (build)
-      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+      QG_GRAPH_DIGEST: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
   publish:
     name: Release Publish (publish)
     runs-on: ubuntu-latest
@@ -156,7 +156,7 @@ jobs:
       - name: Collect Release Publish (publish) result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: collect
           node-id: publish
@@ -164,7 +164,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+          graph-digest: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -194,7 +194,7 @@ jobs:
       QG_OPERATION_ID: release-publish
       QG_NODE_ID: publish
       QG_NODE_TITLE: Release Publish (publish)
-      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+      QG_GRAPH_DIGEST: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
   promote:
     name: Release Promote (promote)
     runs-on: ubuntu-latest
@@ -217,7 +217,7 @@ jobs:
       - name: Collect Release Promote (promote) result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+        uses: alchemmist/quality-graph@f5cef503eaf0734b9c9a0c6f88ee8206b2a6235d
         with:
           operation: collect
           node-id: promote
@@ -225,7 +225,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ job.status }}
-          graph-digest: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+          graph-digest: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754
           approval-findings: 'false'
           approval-files: 'false'
           approval-node: 'false'
@@ -255,4 +255,4 @@ jobs:
       QG_OPERATION_ID: release-promote
       QG_NODE_ID: promote
       QG_NODE_TITLE: Release Promote (promote)
-      QG_GRAPH_DIGEST: 129a1ad5012b8f9ac903b79db2173327d540f8328bbe38d42e226718cf7b77cc
+      QG_GRAPH_DIGEST: fd84567c90f332ee7236b23edfa880300026b0c65241fa4021cb6c374e6c0754

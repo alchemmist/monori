@@ -9,10 +9,6 @@ dependencies = []
 package = false
 
 [tool.uv.sources]
-quality-graph-cli = { git = "https://github.com/alchemmist/quality-graph.git", rev = "53825bd63134543bac6f9fcd869001438dd8758d", subdirectory = "apps/qg" }
-quality-graph-core = { git = "https://github.com/alchemmist/quality-graph.git", rev = "53825bd63134543bac6f9fcd869001438dd8758d", subdirectory = "packages/core" }
-quality-graph-github = { git = "https://github.com/alchemmist/quality-graph.git", rev = "53825bd63134543bac6f9fcd869001438dd8758d", subdirectory = "packages/github" }
-quality-graph-python = { git = "https://github.com/alchemmist/quality-graph.git", rev = "53825bd63134543bac6f9fcd869001438dd8758d", subdirectory = "packages/python" }
 monori-ci = { workspace = true }
 monori-server = { workspace = true }
 
@@ -23,10 +19,10 @@ members = ["common", "ci", "server"]
 format = ["monori-ci", "ruff==0.17.5"]
 ci = ["monori-ci", "pytest>=8"]
 quality-graph = [
-  "quality-graph-core==0.2.2",
-  "quality-graph-cli==0.2.2",
-  "quality-graph-github==0.2.2",
-  "quality-graph-python==0.2.2",
+  "quality-graph-core==0.2.4",
+  "quality-graph-cli==0.2.4",
+  "quality-graph-github==0.2.4",
+  "quality-graph-python==0.2.4",
 ]
 lint = ["monori-ci", "ruff==0.17.5"]
 test = [
