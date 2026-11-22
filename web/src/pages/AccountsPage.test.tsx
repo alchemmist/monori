@@ -46,7 +46,7 @@ describe("AccountsPage", () => {
         setPath("/");
         vi.clearAllMocks();
         vi.mocked(api.connectionsAvailable).mockResolvedValue([]);
-        vi.mocked(api.reconcileHistory).mockResolvedValue([]);
+        vi.spyOn(api, "reconcileHistory").mockResolvedValue([]);
     });
 
     it("lists the demo accounts under the page heading", () => {
