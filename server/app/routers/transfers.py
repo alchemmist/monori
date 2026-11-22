@@ -2,7 +2,6 @@
 """Provide backend functionality."""
 
 import json
-import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,7 +10,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.db import begin_write
-from monori.server.app.db_records import TransactionRecord
+from monori.server.app.db_records import TransactionRecord, row_int
+from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.deps import TransactionResponse, conn, serialize_tx
 from monori.server.app.importer import tx_hash
 from monori.server.app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
@@ -114,7 +114,7 @@ class DeletedResponse:
     deleted: int
 
 
-def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
+def account_exists(c: DatabaseConnection, account_id: int, uid: int) -> bool:
     """Handle account exists."""
     return (
         c.execute("SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)).fetchone()
@@ -325,13 +325,13 @@ def delete_transfer_with_legs(
         ).fetchone()
         if row is None:
             raise HTTPException(404, "transfer not found")
-        leg_ids = (int(row[0]), int(row[1]))
-        owned_legs = c.execute(
-            "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id=t.account_id"
+        leg_ids = (row_int(row, "out_tx_id"), row_int(row, "in_tx_id"))
+        owned_row = c.execute(
+            "SELECT COUNT(*) AS owned_legs FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE a.user_id=? AND t.transfer_id=? AND t.id IN (?, ?)",
             (user.id, transfer_id, *leg_ids),
-        ).fetchone()[0]
-        if owned_legs != TRANSFER_LEGS:
+        ).fetchone()
+        if owned_row is None or row_int(owned_row, "owned_legs") != TRANSFER_LEGS:
             raise HTTPException(409, "transfer does not have two owned legs")
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[0],))
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[1],))
