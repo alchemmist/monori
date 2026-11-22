@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import TabHost from "../components/TabHost.jsx";
 import AccountsPage from "./AccountsPage.jsx";
 import {
     atDemo,
@@ -162,7 +163,6 @@ describe("AccountsPage", () => {
         });
 
         it.each([
-            ["Reconcile", "Reconcile"],
             ["Connect bank", "Bank sync"],
             ["Delete", "Delete Card"],
         ])("opens the %s dialog", async (action, title) => {
@@ -548,32 +548,54 @@ describe("AccountsPage", () => {
     });
 
     describe("more coverage", () => {
-        it("passes the computed balance into the reconcile dialog", async () => {
+        it("passes the computed balance into the reconcile tab", async () => {
             seed({
                 accounts: [account(1, { name: "Card", openingBalance: 1_000_00 })],
                 transactions: [
                     { id: 1, accountId: 1, categoryId: 2, amount: -300_00, date: "2026-03-01" },
                 ],
             });
-            const { user } = renderUI(<AccountsPage />);
+            const { user } = renderUI(
+                <>
+                    <AccountsPage />
+                    <TabHost />
+                </>,
+            );
 
             await openMenu(user, "Card");
             await user.click(await screen.findByRole("menuitem", { name: "Reconcile" }));
 
-            const dialog = screen.getByRole("dialog");
+            const dialog = screen.getByRole("complementary");
             expect(dialog).toHaveTextContent("Computed balance");
-            expect(dialog.querySelector<HTMLElement>(".num")!.textContent).toBe("700 ₽");
+            expect(dialog.querySelector<HTMLElement>(".num")!.textContent).toBe(
+                new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: "RUB",
+                    minimumFractionDigits: 0,
+                }).format(700),
+            );
         });
 
-        it("reconcile dialog shows a zero balance for an account with no data", async () => {
+        it("reconcile tab shows a zero balance for an account with no data", async () => {
             seed({ accounts: [account(9, { name: "Empty", openingBalance: 0 })] });
-            const { user } = renderUI(<AccountsPage />);
+            const { user } = renderUI(
+                <>
+                    <AccountsPage />
+                    <TabHost />
+                </>,
+            );
 
             await openMenu(user, "Empty");
             await user.click(await screen.findByRole("menuitem", { name: "Reconcile" }));
 
-            expect(screen.getByRole("dialog").querySelector<HTMLElement>(".num")!.textContent).toBe(
-                "0 ₽",
+            expect(
+                screen.getByRole("complementary").querySelector<HTMLElement>(".num")!.textContent,
+            ).toBe(
+                new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: "RUB",
+                    minimumFractionDigits: 0,
+                }).format(0),
             );
         });
 

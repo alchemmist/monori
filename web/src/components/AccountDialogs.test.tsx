@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderUI, resetStore, screen, seed, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
-import { AccountDeleteDialog, AccountEditTab, AccountReconcileDialog } from "./AccountDialogs.jsx";
+import { AccountDeleteDialog, AccountEditTab, AccountReconcileTab } from "./AccountDialogs.jsx";
 
 const account = {
     id: 1,
@@ -81,13 +81,25 @@ describe("account dialogs", () => {
 
     it("posts a reconciliation adjustment and validates bad balances", async () => {
         seed({ accounts: [account] });
+        vi.spyOn(useStore.getState(), "reconcileHistory")
+            .mockResolvedValueOnce([])
+            .mockResolvedValue([
+                {
+                    id: 1,
+                    createdAt: "2026-03-01T00:00:00Z",
+                    actualBalance: 10250,
+                    computedBalance: 10000,
+                    delta: 250,
+                    adjustmentTxId: null,
+                },
+            ]);
         const reconcile = vi
             .spyOn(useStore.getState(), "reconcileAccount")
             .mockResolvedValue({ delta: 250 });
         const notify = vi.spyOn(useStore.getState(), "notify");
         const close = vi.fn();
         const { user } = renderUI(
-            <AccountReconcileDialog account={account} balance={10000} onClose={close} />,
+            <AccountReconcileTab account={account} balance={10000} onClose={close} />,
         );
         expect(screen.getByText(/Computed balance/)).toBeInTheDocument();
         await user.clear(screen.getByLabelText("Actual bank balance"));
@@ -95,7 +107,8 @@ describe("account dialogs", () => {
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         await waitFor(() => expect(reconcile).toHaveBeenCalledWith(1, 10250));
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ theme: "success" }));
-        expect(close).toHaveBeenCalled();
+        expect(await screen.findByText("Adjusted")).toBeVisible();
+        expect(close).not.toHaveBeenCalled();
     });
 
     it.each(["success", "failure"])(
@@ -116,11 +129,7 @@ describe("account dialogs", () => {
                 .mockReturnValueOnce(first)
                 .mockReturnValueOnce(second);
             const dialog = (id: number) => (
-                <AccountReconcileDialog
-                    account={{ ...account, id }}
-                    balance={0}
-                    onClose={vi.fn()}
-                />
+                <AccountReconcileTab account={{ ...account, id }} balance={0} onClose={vi.fn()} />
             );
             const view = renderUI(dialog(1));
             expect(await screen.findByText("No reconciliations recorded.")).toBeInTheDocument();
@@ -157,7 +166,7 @@ describe("account dialogs", () => {
         ]);
         const { user } = renderUI(
             <MemoryRouter>
-                <AccountReconcileDialog account={account} balance={9000} onClose={vi.fn()} />
+                <AccountReconcileTab account={account} balance={9000} onClose={vi.fn()} />
             </MemoryRouter>,
         );
         await user.click(await screen.findByText(/Last reconciled:/));
@@ -283,13 +292,13 @@ describe("account dialogs", () => {
         const reconcile = vi.spyOn(useStore.getState(), "reconcileAccount");
         const notify = vi.spyOn(useStore.getState(), "notify");
         const { user, rerender } = renderUI(
-            <AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />,
+            <AccountReconcileTab account={account} balance={10000} onClose={vi.fn()} />,
         );
         await user.clear(screen.getByLabelText("Actual bank balance"));
         await user.type(screen.getByLabelText("Actual bank balance"), "-");
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         expect(reconcile).not.toHaveBeenCalled();
-        expect(notify).toHaveBeenCalledWith({ title: "Balance is not a number", theme: "danger" });
+        expect(screen.getByRole("button", { name: "Reconcile" })).toBeDisabled();
         reconcile.mockResolvedValue({ delta: 0 });
         await user.clear(screen.getByLabelText("Actual bank balance"));
         await user.type(screen.getByLabelText("Actual bank balance"), "100");
@@ -297,7 +306,7 @@ describe("account dialogs", () => {
         await waitFor(() =>
             expect(notify).toHaveBeenCalledWith({ title: "Already reconciled", theme: "success" }),
         );
-        rerender(<AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />);
+        rerender(<AccountReconcileTab account={account} balance={10000} onClose={vi.fn()} />);
         reconcile.mockRejectedValue(new Error("offline"));
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         await waitFor(() =>

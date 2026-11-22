@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "../store.js";
-import { AccountEditTab } from "./AccountDialogs.jsx";
+import { accountBalances } from "../engine/analytics.js";
+import { AccountReconcileTab, AccountEditTab } from "./AccountDialogs.jsx";
 import AddTxTab from "./AddTxTab.jsx";
 import AdminSqlTab from "./AdminSqlTab.jsx";
 import AdminTxTab from "./AdminTxTab.jsx";
@@ -44,6 +45,21 @@ function AccountEditHost({ accountId, onClose }: { accountId?: Id; onClose: () =
     return <AccountEditTab account={account ?? {}} onClose={onClose} />;
 }
 
+function ReconcileHost({ id, onClose }: { id: unknown; onClose: () => void }) {
+    const snapshot = useStore((s) => s.snapshot);
+    const account = snapshot?.accounts.find((a) => a.id === id);
+    useEffect(() => {
+        if (snapshot && !account) onClose();
+    }, [account, snapshot, onClose]);
+    return account && snapshot ? (
+        <AccountReconcileTab
+            account={account}
+            balance={accountBalances(snapshot).get(account.id) ?? 0}
+            onClose={onClose}
+        />
+    ) : null;
+}
+
 function TransactionSplitHost({
     transactionId,
     onClose,
@@ -74,6 +90,8 @@ export default function TabHost() {
     const closeTab = useStore((s) => s.closeTab);
     return tabs.map((t) => {
         const close = () => closeTab(t.id);
+        if (t.kind === "account-reconcile")
+            return <ReconcileHost key={t.id} id={t.props["accountId"]} onClose={close} />;
         if (t.kind === "account-edit") {
             const accountId =
                 typeof t.props["accountId"] === "number" ? t.props["accountId"] : undefined;

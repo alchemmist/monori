@@ -337,7 +337,7 @@ export function AccountDeleteDialog({
     );
 }
 
-export function AccountReconcileDialog({
+export function AccountReconcileTab({
     account,
     balance,
     onClose,
@@ -348,6 +348,7 @@ export function AccountReconcileDialog({
 }) {
     const { reconcileAccount, reconcileHistory, notify } = useStore();
     const [history, setHistory] = useState<ReconcileEvent[] | "failed" | null>(null);
+    const [historyVersion, refreshHistory] = useState(0);
     useEffect(() => {
         let current = true;
         setHistory(null);
@@ -362,7 +363,7 @@ export function AccountReconcileDialog({
         return () => {
             current = false;
         };
-    }, [account.id, reconcileHistory]);
+    }, [account.id, reconcileHistory, historyVersion]);
     const [actual, setActual] = useState(amountInput(balance));
     const [busy, setBusy] = useState(false);
     const actualKop = parseRub(actual);
@@ -383,7 +384,7 @@ export function AccountReconcileDialog({
                         : `Adjustment of ${money(res.delta)} posted`,
                 theme: "success",
             });
-            onClose();
+            refreshHistory((version) => version + 1);
         } catch (e) {
             notify({ title: "Failed to reconcile", theme: "danger", content: String(e) });
         } finally {
@@ -391,18 +392,33 @@ export function AccountReconcileDialog({
         }
     };
 
+    const amount = (kop: number) =>
+        new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: account.currency,
+            minimumFractionDigits: kop % 100 === 0 ? 0 : 2,
+        }).format(kop / 100);
+    const stamp = (iso: string) =>
+        new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+            new Date(iso),
+        );
     return (
-        <AppDialog
+        <Tab
             title={`Reconcile ${account.name}`}
+            strip={`Reconcile · ${account.name}`}
+            persistKey="account-reconcile"
+            width={30}
             onClose={onClose}
-            applyText="Reconcile"
-            onApply={() => void apply()}
-            applyLoading={busy}
+            footer={
+                <Button loading={busy} disabled={actualKop == null} onClick={() => void apply()}>
+                    Reconcile
+                </Button>
+            }
         >
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <Txt tone="secondary">Computed balance</Txt>
-                    <span className="num">{money(balance)}</span>
+            <section className="rc-form">
+                <div className="rc-balance">
+                    <span>Computed balance</span>
+                    <strong className="num">{amount(balance)}</strong>
                 </div>
                 <FAmountInput
                     label="Actual bank balance"
@@ -410,47 +426,69 @@ export function AccountReconcileDialog({
                     onChange={setActual}
                     autoFocus
                 />
+                {delta != null && (
+                    <p className="rc-note">
+                        {delta === 0
+                            ? "Balances match. No adjustment needed."
+                            : `An adjustment of ${amount(delta)} will be posted.`}
+                    </p>
+                )}
+            </section>
+            <section className="rc-history" aria-label="Reconciliation history">
+                <h3>History</h3>
                 {history === null ? (
-                    <Txt>Loading reconciliation history…</Txt>
+                    <p>Loading reconciliation history…</p>
                 ) : history === "failed" ? (
-                    <Txt>Could not load reconciliation history.</Txt>
+                    <p>Could not load reconciliation history.</p>
                 ) : !history.length ? (
-                    <Txt>No reconciliations recorded.</Txt>
+                    <div className="rc-empty">
+                        <strong>No reconciliations recorded.</strong>
+                        <p>Your first balance check will appear here.</p>
+                    </div>
                 ) : (
-                    <details>
-                        <summary>
-                            Last reconciled: {new Date(history[0]!.createdAt).toLocaleString()}
-                        </summary>
+                    <>
+                        <p>Last reconciled: {stamp(history[0]!.createdAt)}</p>
                         <ol aria-label="Recent reconciliations">
                             {history.map((event) => (
                                 <li key={event.id}>
-                                    {new Date(event.createdAt).toLocaleString()} · Computed{" "}
-                                    {money(event.computedBalance)} · Actual{" "}
-                                    {money(event.actualBalance)} · Difference {money(event.delta)}
+                                    <header>
+                                        <span className="rc-status" data-match={event.delta === 0}>
+                                            {event.delta === 0 ? "Matched" : "Adjusted"}
+                                        </span>
+                                        <time dateTime={event.createdAt}>
+                                            {stamp(event.createdAt)}
+                                        </time>
+                                    </header>
+                                    <dl>
+                                        {[
+                                            ["Computed", amount(event.computedBalance)],
+                                            ["Actual", amount(event.actualBalance)],
+                                            [
+                                                "Difference",
+                                                (event.delta > 0 ? "+" : "") + amount(event.delta),
+                                            ],
+                                        ].map(([label, value]) => (
+                                            <div key={label}>
+                                                <dt>{label}</dt>
+                                                <dd>{value}</dd>
+                                            </div>
+                                        ))}
+                                    </dl>
                                     {event.adjustmentTxId != null && (
-                                        <>
-                                            {" "}
-                                            ·{" "}
-                                            <Link
-                                                onClick={onClose}
-                                                to={`${isDemo() ? "/demo" : ""}/transactions?transactionId=${event.adjustmentTxId}`}
-                                            >
-                                                Adjustment #{event.adjustmentTxId}
-                                            </Link>
-                                        </>
+                                        <Link
+                                            onClick={onClose}
+                                            to={`${isDemo() ? "/demo" : ""}/transactions?transactionId=${event.adjustmentTxId}`}
+                                        >
+                                            Adjustment #{event.adjustmentTxId}{" "}
+                                            <span aria-hidden="true">↗</span>
+                                        </Link>
                                     )}
                                 </li>
                             ))}
                         </ol>
-                    </details>
+                    </>
                 )}
-                {delta != null && delta !== 0 && (
-                    <Txt tone="secondary" caption>
-                        An adjustment of {money(delta)} will be posted so the account matches your
-                        bank.
-                    </Txt>
-                )}
-            </div>
-        </AppDialog>
+            </section>
+        </Tab>
     );
 }
