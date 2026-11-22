@@ -15,10 +15,10 @@ from pglast.parser import ParseError
 from pglast.stream import RawStream
 
 if TYPE_CHECKING:
-    import sqlite3
     from collections.abc import Callable, Iterator
     from typing import Protocol
 
+    from monori.server.app.db import DatabaseConnection
     from monori.server.app.routers.admin_sql import (
         SqlCell,
         SqlDryResponse,
@@ -259,8 +259,8 @@ def run(  # noqa: PLR0913, PLR0915
     query_timeout_s: float,
     row_limit: int,
     cell: Callable[[SqliteValue], SqlCell],
-    audit: Callable[[sqlite3.Connection, int, str, str], None],
-    conn: Callable[[], sqlite3.Connection],
+    audit: Callable[[DatabaseConnection, int, str, str], None],
+    conn: Callable[[], DatabaseConnection],
     response: Callable[..., SqlResponse],
     dry_response: Callable[..., SqlDryResponse],
 ) -> SqlResponse | SqlDryResponse:

@@ -24,6 +24,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from monori.server.app.admin import admin_user
 from monori.server.app.auth import AuthenticatedUser
 from monori.server.app.deps import conn
+from monori.server.app.db import DatabaseConnection
 from monori.server.app.pg_console import run as run_pg_console
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -133,12 +134,6 @@ def run_sql(  # noqa: PLR0915
     """
     if os.environ.get("MONORI_DATABASE_URL"):
 
-        def sqlite_conn() -> sqlite3.Connection:
-            connection = conn()
-            if not isinstance(connection, sqlite3.Connection):
-                raise TypeError("SQLite connection required for SQL audit")  # noqa: EM101, TRY003
-            return connection
-
         return run_pg_console(
             body,
             admin.id,
@@ -147,7 +142,7 @@ def run_sql(  # noqa: PLR0915
             row_limit=ROW_LIMIT,
             cell=cell,
             audit=_audit,
-            conn=sqlite_conn,
+            conn=conn,
             response=SqlResponse,
             dry_response=SqlDryResponse,
         )
@@ -239,8 +234,8 @@ def run_sql(  # noqa: PLR0915
         c.close()
 
 
-def _audit(c: sqlite3.Connection, uid: int, kind: str, sql: str) -> None:
-
+def _audit(c: DatabaseConnection, uid: int, kind: str, sql: str) -> None:
+    """Record a SQL-console attempt in the active database backend."""
     with contextlib.suppress(sqlite3.Error):
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at, detail) VALUES (?, ?, ?, ?)",
