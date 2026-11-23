@@ -19,7 +19,7 @@
         "@mantine/core": "^9.7.5",
         "@mantine/hooks": "^9.7.5",
         "@mantine/notifications": "^9.7.5",
-        "mermaid": "^11.17.2",
+        "mermaid": "^12.3.0",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
         "react-markdown": "^10.1.0",
