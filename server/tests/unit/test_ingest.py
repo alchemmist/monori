@@ -16,6 +16,7 @@ from monori.server.app.ingest import (
     drop_already_present,
     existing_hash_counts,
     historical_day_counts,
+    INSERT_SQL,
     load_rules,
 )
 
@@ -370,3 +371,66 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -
     kept, dropped = drop_already_present(rows, historical_day_counts(c, uid))
     assert dropped == 1
     assert [row.description for row in kept] == ["Dodo Pizza"]
+
+
+def test_commit_rows_skips_only_up_to_the_stored_copy_count() -> None:
+    """A batch carrying more copies than the ledger skips the surplus.
+
+    This pins the batch-side duplicate bookkeeping: two commits of the same
+    row are both accepted, but a third re-commit may only re-insert the
+    surplus beyond what the ledger already holds.
+    """
+def test_commit_rows_skips_only_up_to_the_stored_copy_count(tmp_path: Path) -> None:
+    c = _db(tmp_path)
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
+    row = _row("2026-03-01T00:00:00", -100, "A")
+
+    # two genuine repeats are both committed
+    assert commit_rows(c, acct, [row, row], TransactionSource.IMPORT) == (2, 0)
+    c.commit()
+    # the ledger now holds two copies; re-committing three keeps only the surplus
+    assert commit_rows(c, acct, [row, row, row], TransactionSource.IMPORT) == (1, 2)
+    c.commit()
+    total = c.execute("SELECT COUNT(*) FROM transactions").fetchone()
+    assert total is not None
+    assert total[0] == 3
+
+
+def test_drop_already_present_counts_every_batch_copy_against_the_ledger() -> None:
+    rows = [_row("2026-03-02T00:00:00", -50, "Coffee")] * 3
+    kept, dropped = drop_already_present(
+        rows,
+        {("2026-03-02", -50, "coffee"): 2},
+    )
+    assert (len(kept), dropped) == (1, 2)
+
+
+def test_commit_rows_dedupes_against_hashes_written_by_other_write_paths(tmp_path: Path) -> None:
+    """The dedupe hash must agree with the tx_hash() every other writer uses.
+
+    Statements are imported through import.py and manual rows through the
+    routers; each writes tx_hash(account_id, ...). A bank sync of the same
+    operation must be recognized as a duplicate instead of double-charging.
+    """
+    from monori.server.app.importer import tx_hash
+
+    c = _db(tmp_path)
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
+    c.execute(
+        INSERT_SQL,
+        (
+            "2026-03-05T00:00:00",
+            -100,
+            "A",
+            "",
+            "",
+            None,
+            acct,
+            None,
+            tx_hash(acct, "2026-03-05T00:00:00", -100, "A"),
+            "manual",
+        ),
+    )
+    c.commit()
+    row = _row("2026-03-05T00:00:00", -100, "A")
+    assert commit_rows(c, acct, [row], TransactionSource.IMPORT) == (0, 1)
