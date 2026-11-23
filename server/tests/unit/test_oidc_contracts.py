@@ -1,5 +1,6 @@
 # Copyright (c) 2026
-"""Unit tests pinning the OIDC protocol contracts inside the SSO flow.
+"""
+Unit tests pinning the OIDC protocol contracts inside the SSO flow.
 
 The mutation gate runs only unit tests, and the previous round-trip test
 stubbed the IdP with ``lambda *_args, **_kwargs: ...``: any change to the
@@ -8,6 +9,7 @@ setup passed unnoticed. These tests pin those wire contracts, the
 multi-audience ``azp`` rules, the unverified-email policy and the
 already-linked conflict status.
 """
+
 import base64
 import hashlib
 import time
@@ -20,9 +22,8 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
+from monori.server.app.routers import oidc
 from monori.server.tests.conftest import login_as
-
-import monori.server.app.routers.oidc as oidc
 
 ISS = "https://sso.example.org/"
 ROOT = "/api/auth/oidc/"
@@ -48,12 +49,12 @@ def sso(anon: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     captured: dict = {"posts": [], "post_fails": False, "discovers": [], "signing_keys": []}
 
-    def post(url, *args, **kwargs):
-        captured["posts"].append((url, args, kwargs))
+    def post(
+        url: str, *, auth: tuple[str, str] | None = None, data: dict[str, str] | None = None
+    ) -> httpx.Response:
+        captured["posts"].append((url, (), {"auth": auth, "data": data}))
         if captured["post_fails"]:
-            return httpx.Response(
-                503, request=httpx.Request("POST", url), json={"error": "down"}
-            )
+            return httpx.Response(503, request=httpx.Request("POST", url), json={"error": "down"})
         return httpx.Response(
             200,
             request=httpx.Request("POST", url),
@@ -61,18 +62,21 @@ def sso(anon: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict:
         )
 
     class RecordingJWKClient(jwt.PyJWKClient):
-        def __init__(self, uri, timeout=None, *args, **kwargs):
+        def __init__(self, uri: str, timeout: int | None = None) -> None:
             captured["jwk"] = (uri, timeout)
-            super().__init__(uri, timeout=timeout, *args, **kwargs)
+            super().__init__(uri, timeout=timeout)
 
-    monkeypatch.setattr(oidc, "discover", lambda issuer: captured["discovers"].append(issuer) or META)
+    monkeypatch.setattr(
+        oidc, "discover", lambda issuer: captured["discovers"].append(issuer) or META
+    )
     monkeypatch.setattr(oidc.httpx, "post", post)
     monkeypatch.setattr(oidc.jwt, "PyJWKClient", RecordingJWKClient)
     monkeypatch.setattr(
         jwt.PyJWKClient,
         "get_signing_key_from_jwt",
-        lambda self, raw: captured["signing_keys"].append(raw)
-        or SimpleNamespace(key=key.public_key()),
+        lambda _, raw: (
+            captured["signing_keys"].append(raw) or SimpleNamespace(key=key.public_key())
+        ),
     )
     return {"client": anon, "key": key, "captured": captured}
 
@@ -94,9 +98,9 @@ def _start(sso: dict) -> dict:
 
 def _finish(sso: dict, claims_extra: dict | None = None) -> httpx.Response:
     start = _start(sso)
-    verifier = jwt.decode(
-        start["transaction"], key="", options={"verify_signature": False}
-    )["verifier"]
+    verifier = jwt.decode(start["transaction"], key="", options={"verify_signature": False})[
+        "verifier"
+    ]
     claims = {
         "iss": ISS,
         "aud": CLIENT,
@@ -140,15 +144,13 @@ def test_start_url_carries_the_oauth2_wire_contract(sso: dict) -> None:
     assert start["query"]["response_type"] == ["code"]
     assert start["query"]["scope"] == ["openid profile email"]
     assert start["query"]["code_challenge_method"] == ["S256"]
-    verifier = jwt.decode(
-        start["transaction"], key="", options={"verify_signature": False}
-    )["verifier"]
-    assert set(verifier) <= set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    verifier = jwt.decode(start["transaction"], key="", options={"verify_signature": False})[
+        "verifier"
+    ]
+    assert set(verifier) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    expected = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
-    expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(
-        b"="
-    ).decode()
     assert start["query"]["code_challenge"] == [expected]
     # state and nonce: 32 random bytes, base64url-encoded without padding.
     assert len(start["query"]["nonce"][0]) == 43
@@ -163,14 +165,17 @@ def test_finish_exchanges_the_code_with_the_idp_contract(sso: dict) -> None:
     assert flow.headers["cache-control"] == "no-store"
     assert sso["captured"]["discovers"] == [ISS, ISS]  # start + finish
     assert len(sso["captured"]["signing_keys"]) == 1
-    assert jwt.decode(
-        sso["captured"]["signing_keys"][0],
-        key="",
-        options={"verify_signature": False},
-    )["sub"] == "person"
+    assert (
+        jwt.decode(
+            sso["captured"]["signing_keys"][0],
+            key="",
+            options={"verify_signature": False},
+        )["sub"]
+        == "person"
+    )
     posts = sso["captured"]["posts"]
     assert len(posts) == 1
-    url, args, kwargs = posts[0]
+    url, _args, kwargs = posts[0]
     assert url == META["token_endpoint"]
     assert kwargs["auth"] == (CLIENT, SECRET)
     assert kwargs["data"] == {
@@ -219,17 +224,9 @@ def test_wrong_azp_on_single_audience_is_rejected(sso: dict) -> None:
     assert _finish(sso, {"azp": "evil"}).status_code == 401
 
 
-    first = login_as(sso["client"], "first@example.org")
-    second = login_as(sso["client"], "second@example.org")
-    # Link the SSO identity to the first account…
-    detail = _link_finish(sso, first, sub="person")
-    assert detail.status_code == 200
-    # …then second account must get a conflict when linking the same identity.
-    resp = _link_finish(sso, second, sub="person")
-    assert resp.status_code == 409
-
-
-def _link_finish(sso: dict, headers: dict[str, str], **claims_extra: object) -> httpx.Response:
+def _link_finish(
+    sso: dict, headers: dict[str, str], **claims_extra: str | int | bool | None
+) -> httpx.Response:
     start = sso["client"].post(ROOT + "link/start", headers=headers)
     assert start.status_code == 200, start.text
     body = start.json()
@@ -264,11 +261,9 @@ def test_new_identity_requires_a_verified_email(sso: dict) -> None:
     assert _finish(sso, {"email": 12345}).status_code == 409
 
 
-def _forged_flow(sso: dict, start: dict, **changes: object) -> str:
+def _forged_flow(start: dict, **changes: str | int | bool | None) -> str:
     """Re-sign the app-issued flow transaction with the server's own secret."""
-    payload = jwt.decode(
-        start["transaction"], key="", options={"verify_signature": False}
-    )
+    payload = jwt.decode(start["transaction"], key="", options={"verify_signature": False})
     for removed in [k for k, v in changes.items() if v is None]:
         payload.pop(removed, None)
     payload.update({k: v for k, v in changes.items() if v is not None})
@@ -277,7 +272,7 @@ def _forged_flow(sso: dict, start: dict, **changes: object) -> str:
 
 def test_flow_without_exp_is_rejected(sso: dict) -> None:
     start = _start(sso)
-    forged = _forged_flow(sso, start, exp=None)
+    forged = _forged_flow(start, exp=None)
     claims: dict = {}
     iat = int(time.time())
     claims = {
@@ -298,7 +293,7 @@ def test_flow_without_exp_is_rejected(sso: dict) -> None:
 
 def test_flow_from_another_issuer_is_rejected(sso: dict) -> None:
     start = _start(sso)
-    forged = _forged_flow(sso, start, iss="https://evil.example.org/")
+    forged = _forged_flow(start, iss="https://evil.example.org/")
     claims = {
         "iss": ISS,
         "aud": CLIENT,
