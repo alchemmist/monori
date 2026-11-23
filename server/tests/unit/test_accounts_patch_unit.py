@@ -1,5 +1,6 @@
 # Copyright (c) 2026
-"""Unit tests pinning account patch helpers in routers.accounts.
+"""
+Unit tests pinning account patch helpers in routers.accounts.
 
 The mutation gate runs only unit tests (``-m "not integration"``), and the
 account update path was previously covered only by integration tests:
@@ -7,6 +8,7 @@ mutmut survivors showed that renaming an account, updating its icon image,
 card tails, archive flag and duplicate-name protection were all unguarded
 at the unit level.
 """
+
 import sqlite3
 from pathlib import Path
 
@@ -59,7 +61,7 @@ def test_clean_tails_normalizes_dedupes_and_joins() -> None:
     assert _clean_tails(["*8181", "  8181 ", "1234"]) == "8181,1234"
 
 
-@pytest.mark.parametrize("bad", ["", "*"])  # no digits
+@pytest.mark.parametrize("bad", ["", "*"])
 def test_clean_tails_rejects_digitless_tail(bad: str) -> None:
     with pytest.raises(HTTPException) as e:
         _clean_tails([bad])
@@ -79,7 +81,6 @@ def test_validate_account_patch_rejects_invalid_color_and_image() -> None:
     with pytest.raises(HTTPException) as e:
         _validate_account_patch(AccountPatch(icon_image="data:text/plain;base64,AAAA"))
     assert e.value.status_code == 400
-    # valid values pass
     _validate_account_patch(AccountPatch(color="#ff0000", icon_image="data:image/png;base64,AAAA"))
 
 
@@ -130,7 +131,9 @@ def test_update_account_fields_writes_every_present_field(tmp_path: Path) -> Non
 def test_update_icon_image_empty_string_clears_the_image(tmp_path: Path) -> None:
     c = _db(tmp_path)
     account_id = _add_account(c)
-    _update_account_fields(c, account_id, _uid(c), AccountPatch(icon_image="data:image/png;base64,QUJD"))
+    _update_account_fields(
+        c, account_id, _uid(c), AccountPatch(icon_image="data:image/png;base64,QUJD")
+    )
     _update_account_fields(c, account_id, _uid(c), AccountPatch(icon_image=""))
     row = c.execute("SELECT icon_image FROM accounts WHERE id=?", (account_id,)).fetchone()
     assert row is not None
@@ -160,10 +163,7 @@ def test_ensure_account_name_available_rejects_duplicates_with_409(tmp_path: Pat
         _ensure_account_name_available(c, second, _uid(c), "Card")
     assert e.value.status_code == 409
 
-    # the account keeping its own name is fine
     _ensure_account_name_available(c, first, _uid(c), "Card")
-    # another user owning the same name is fine: user 2 has no account named
-    # "Card", so renaming THEIR account (any id) to "Card" must not conflict
     c.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
         " VALUES ('u2@e.co', 'u2@e.co', 'h', 't')",
@@ -176,13 +176,12 @@ def test_ensure_account_name_available_rejects_duplicates_with_409(tmp_path: Pat
     )
     c.commit()
     _ensure_account_name_available(c, _last_id(c), uid2, "Card")
-    # and a null name never conflicts
     _ensure_account_name_available(c, second, _uid(c), None)
 
 
 def test_update_account_fields_blocks_renaming_onto_an_existing_name(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    first = _add_account(c, "Card")
+    _add_account(c, "Card")
     second = _add_account(c, "Other")
     c.commit()
 
@@ -193,7 +192,6 @@ def test_update_account_fields_blocks_renaming_onto_an_existing_name(tmp_path: P
     assert row is not None
     assert row["name"] == "Other"
 
-    # renaming to a genuinely free name succeeds and persists
     _update_account_fields(c, second, _uid(c), AccountPatch(name="Salary"))
     row = c.execute("SELECT name FROM accounts WHERE id=?", (second,)).fetchone()
     assert row is not None

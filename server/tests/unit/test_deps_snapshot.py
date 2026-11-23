@@ -1,5 +1,6 @@
 # Copyright (c) 2026
-"""Unit tests that pin snapshot() scoping and width-related behavior.
+"""
+Unit tests that pin snapshot() scoping and width-related behavior.
 
 These exist because the Python mutation gate runs only unit tests
 (``-m "not integration"``), and ``deps.snapshot`` previously had no unit
@@ -7,12 +8,13 @@ coverage for: the ``tx_limit`` window, the ``transactions_total`` count
 path, category goal fields, user serialization of login/default account,
 and the transfer scoping clause.
 """
+
 import sqlite3
 from pathlib import Path
 
 import monori.server.app.db as dbmod
-from monori.server.app.deps import snapshot, serialize_user
 from monori.server.app.db_records import UserRecord
+from monori.server.app.deps import serialize_user, snapshot
 
 
 def _db(tmp_path: Path) -> sqlite3.Connection:
@@ -23,16 +25,18 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
             " VALUES (?, ?, 'h', 't')",
             (email, email),
         )
-    for uid in (1, 2):
-        c.execute(
-            "INSERT INTO accounts (user_id, name, type, currency, sort)"
-            f" VALUES ({uid}, 'Card {uid}', 'card', 'RUB', 1)",
-        )
+    c.executemany(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (?, ?, 'card', 'RUB', 1)",
+        [(1, "Card 1"), (2, "Card 2")],
+    )
     c.commit()
     return c
 
 
-def _add_tx(c: sqlite3.Connection, account_id: int, date: str, amount: int, tx_id: int | None = None) -> int:
+def _add_tx(
+    c: sqlite3.Connection, account_id: int, date: str, amount: int, tx_id: int | None = None
+) -> int:
     if tx_id is None:
         c.execute(
             "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
@@ -62,12 +66,9 @@ def test_snapshot_tx_limit_returns_newest_window_and_true_total(tmp_path: Path) 
     c.commit()
 
     snap = snapshot(c, 1, tx_limit=2)
-    # newest two, ascending canonical order
     assert [tx.amount for tx in snap.transactions] == [-97, -96]
-    # the window touches only a subset, but the total is the real count
     assert snap.transactions_total == 4
 
-    # a window wider than the data returns everything with the same total
     snap_all = snapshot(c, 1, tx_limit=50)
     assert len(snap_all.transactions) == 4
     assert snap_all.transactions_total == 4
@@ -81,7 +82,6 @@ def test_snapshot_limit_exact_boundary_reports_total_behind_window(tmp_path: Pat
 
     snap = snapshot(c, 1, tx_limit=3)
     assert len(snap.transactions) == 3
-    # len(rows) == tx_limit AND total > limit: total must come from COUNT
     assert snap.transactions_total == 3
 
 
@@ -93,7 +93,7 @@ def test_snapshot_sees_category_goal_fields(tmp_path: Path) -> None:
     )
     gid = _int(c.execute("SELECT MAX(id) FROM category_groups").fetchone())
     c.execute(
-        "INSERT INTO categories (group_id, name, keywords, sort)" " VALUES (?, 'Vacation', 'trip', 1)",
+        "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Vacation', 'trip', 1)",
         (gid,),
     )
     cid = _int(c.execute("SELECT MAX(id) FROM categories").fetchone())

@@ -152,7 +152,6 @@ def test_start_url_carries_the_oauth2_wire_contract(sso: dict) -> None:
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     assert start["query"]["code_challenge"] == [expected]
-    # state and nonce: 32 random bytes, base64url-encoded without padding.
     assert len(start["query"]["nonce"][0]) == 43
     assert set(start["query"]["state"][0]) <= set(
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
@@ -163,7 +162,7 @@ def test_finish_exchanges_the_code_with_the_idp_contract(sso: dict) -> None:
     flow = _finish(sso)
     assert flow.status_code == 200
     assert flow.headers["cache-control"] == "no-store"
-    assert sso["captured"]["discovers"] == [ISS, ISS]  # start + finish
+    assert sso["captured"]["discovers"] == [ISS, ISS]
     assert len(sso["captured"]["signing_keys"]) == 1
     assert (
         jwt.decode(
