@@ -12,7 +12,7 @@ dependencies = [
   "monori-common",
   "openpyxl>=3.1",
   "pglast>=7,<8",
-  "psycopg[binary]==3.3.4",
+  "psycopg[binary]==3.3.9",
   "pyjwt>=2.9",
   "python-multipart>=0.0.9",
   "uvicorn[standard]>=0.30",
