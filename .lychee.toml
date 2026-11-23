@@ -9,4 +9,8 @@ user_agent = "monori-docs-link-check/1.0"
 
 exclude = [
     "^http://localhost(?::[0-9]+)?(?:/.*)?$",
+    # github.com blob/view pages are aggressively rate-limited on CI runners
+    # (intermittent 503 Service Unavailable) even with the job token; these are
+    # valid documentation links to the Vite React plugin repos.
+    '^https://github\.com/vitejs/vite-plugin-react/blob/(?:main|master)/packages/plugin-react(?:-swc)?$',
 ]
