@@ -24,7 +24,7 @@ quality-graph = [
   "quality-graph-github==0.2.4",
   "quality-graph-python==0.2.4",
 ]
-lint = ["monori-ci", "ruff==0.17.5"]
+lint = ["monori-ci", "ruff==0.17.6"]
 test = [
   "monori-ci",
   "monori-server[connectors]",
